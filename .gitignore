@@ -1,0 +1,17 @@
+# Ignore executable files
+a.out
+main
+# Ignore object files
+*.o
+# Ignore files generatied by the coverage test
+*.gcda
+*.gcno
+*.info
+*input*
+*output*
+# Ignore IDEA files
+*.idea*
+*.iml
+*out/
+*cmake-build-debug*
+*cmake-build-release*
