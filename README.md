@@ -1,2 +1,2 @@
-# OS
-Solutions of the variuos exercises on operating systems
+# OSes
+Solutions of the various exercises on operating systems
