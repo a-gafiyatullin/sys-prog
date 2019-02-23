@@ -3,4 +3,4 @@ project(laboratory_work__4 C)
 
 set(CMAKE_C_STANDARD 11)
 
-add_executable(laboratory_work__4 main.c linked_list.h linked_list.c)
+add_executable(laboratory_work__4 src/main.c src/linked_list.h src/linked_list.c)

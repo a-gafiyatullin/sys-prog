@@ -1,7 +1,3 @@
-//
-// Created by xp10rd on 2/10/19.
-//
-
 #include "linked_list.h"
 
 struct node* push_back(struct node* prev, char* str) {
@@ -13,4 +9,13 @@ struct node* push_back(struct node* prev, char* str) {
     strcpy(new_node->data, str);
 
     return new_node;
+}
+
+void erase(struct node* head) {
+    while(head != NULL) {
+        struct node* next = head->next;
+        free(head->data);
+        free(head);
+        head = next;
+    }
 }
