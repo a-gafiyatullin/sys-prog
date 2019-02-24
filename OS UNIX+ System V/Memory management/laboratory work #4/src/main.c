@@ -1,13 +1,11 @@
 #include <stdio.h> //printf, fgets, stdin
-#include <unistd.h> //sysconf
 #include "linked_list.h"
 
 int main() {
-    int line_max = sysconf(_SC_LINE_MAX);
-    char* line = malloc(line_max * sizeof(char));
+    char line[BUFSIZ];
     struct node *head = malloc(sizeof(struct node));
     struct node *current = head;
-    while(fgets(line, line_max, stdin)) {
+    while(fgets(line, BUFSIZ, stdin)) {
         if(line[0] == '.') {
             break;
         } else {
@@ -22,6 +20,5 @@ int main() {
     }
 
     erase(head);
-    free(line);
     return 0;
 }
