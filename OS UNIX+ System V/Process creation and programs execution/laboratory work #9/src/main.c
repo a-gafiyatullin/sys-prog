@@ -2,7 +2,6 @@
 #include <unistd.h>
 #include <wait.h>
 #include <stdlib.h>
-#include <errno.h>
 
 void print_error(int status) {
     if(status == -1) {
