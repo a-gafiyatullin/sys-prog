@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <signal.h>
+#include <termio.h>
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
@@ -67,9 +68,9 @@ int multiplexed_read(int *files, int num) {
             if(errno == EINTR) {
                 continue;
             } else {
+                close(files[current_file]);
                 files[current_file] = -1;
                 opened_num--;
-                close(files[current_file]);
             }
         } else {
             alarm(0);   //stop alarm
