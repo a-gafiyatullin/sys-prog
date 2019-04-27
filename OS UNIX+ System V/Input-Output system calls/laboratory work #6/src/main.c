@@ -62,7 +62,7 @@ int main(int argc, char *argv[]) {
             fprintf(stderr, "Unexpected string number!\n");
             continue;
         }
-        if(lseek(file, indents[num - 1], SEEK_SET) == -1) {
+        if(lseek(file, indents[num - 1] - strings_length[num - 1], SEEK_SET) == -1) {
             perror("lseek");
             break;
         }
@@ -80,15 +80,14 @@ int main(int argc, char *argv[]) {
 int create_search_table(off_t *indents, off_t *strings_length) {
     char symbol;
     off_t string_length = 0, file_length = 0;
-    int i = 1;
-    indents[0] = 0;
+    int i = 0;
     string_max_length = 0;
     while (read(file, &symbol, sizeof(char)) > 0 && i < STRINGS_MAX_NUM) {
         file_length++;
         string_length++;
         if(symbol == '\n') {
             indents[i] = file_length;
-            strings_length[i - 1] = string_length;
+            strings_length[i] = string_length;
             if(string_length > string_max_length) {
                 string_max_length = string_length;
             }
@@ -97,10 +96,12 @@ int create_search_table(off_t *indents, off_t *strings_length) {
         }
     }
 
-    indents[i] = file_length;
-    strings_length[i - 1] = string_length;
-    if(string_length > string_max_length) {
-        string_max_length = string_length;
+    if(i < STRINGS_MAX_NUM) {
+        indents[i] = file_length;
+        strings_length[i] = string_length;
+        if (string_length > string_max_length) {
+            string_max_length = string_length;
+        }
     }
 
     if(lseek(file, 0, SEEK_SET) == -1) {
