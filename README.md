@@ -1,2 +1,2 @@
 # OSes
-Solutions of the various exercises on operating systems
+Solutions of the various exercises on operating systems(also NSU tasks)
