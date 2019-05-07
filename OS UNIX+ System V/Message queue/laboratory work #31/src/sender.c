@@ -3,8 +3,11 @@
 #include <sys/msg.h>
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #define MSGSIZE 512
+
+int set_non_blocking_input();
 
 int main(int argc, char *argv[]) {
 
@@ -41,18 +44,16 @@ int main(int argc, char *argv[]) {
         recvers[i].is_alive = 1;
     }
 
-    while(fgets(msg.mtext, MSGSIZE, stdin)) {
-        for(i = 0; i < argc - 1; i++) {
-            if(recvers[i].is_alive) {
-                msg.mtype = recvers[i].pid;
-                msgsnd(id, &msg, strlen(msg.mtext) + 1, 0);
-            }
-        }
+    if(set_non_blocking_input() == -1) {
+        return -1;
+    }
+    while(!feof(stdin)) {
         if(msgrcv(id, &msg, MSGSIZE, pid, IPC_NOWAIT) != -1) {
             recv_pid = atoi(msg.mtext);
             for(i = 0; i < argc - 1; i++) {
                 if(recvers[i].pid == recv_pid) {
                     recvers[i].is_alive = 0;
+                    break;
                 }
             }
             alive_recvers_num--;
@@ -60,7 +61,17 @@ int main(int argc, char *argv[]) {
                 break;
             }
         }
+        if(fgets(msg.mtext, MSGSIZE, stdin) == NULL) {
+            continue;
+        }
+        for(i = 0; i < argc - 1; i++) {
+            if(recvers[i].is_alive) {
+                msg.mtype = recvers[i].pid;
+                msgsnd(id, &msg, strlen(msg.mtext) + 1, 0);
+            }
+        }
     }
+
     if(alive_recvers_num != 0) {
         msg.mtext[0] = 'F';
         msg.mtext[1] = '\0';
@@ -71,8 +82,28 @@ int main(int argc, char *argv[]) {
             msgsnd(id, &msg, strlen(msg.mtext) + 1, 0);
         }
     }
-
-    msgctl(id, IPC_RMID, NULL);
+    if(msgctl(id, IPC_RMID, NULL) == -1) {
+        perror("msgctl");
+    } else {
+        fprintf(stdout, "Sender finished normally\n");
+    }
     free(recvers);
+    return 0;
+}
+
+int set_non_blocking_input() {
+
+    int iflags;
+
+    if((iflags = fcntl(STDIN_FILENO, F_GETFL, 0)) == -1) {
+        perror("fcntl");
+        return -1;
+    }
+    iflags |= O_NONBLOCK;
+    if(fcntl(STDIN_FILENO, F_SETFL, iflags) == -1) {
+        perror("fcntl");
+        return -1;
+    }
+
     return 0;
 }

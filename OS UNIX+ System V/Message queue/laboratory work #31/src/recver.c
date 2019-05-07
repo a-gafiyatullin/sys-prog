@@ -59,6 +59,10 @@ int main(int argc, char *argv[]) {
 void finish_ipc() {
     msg.mtype = sender_pid;
     sprintf(msg.mtext, "%d", my_pid);
-    msgsnd(id, &msg, strlen(msg.mtext) + 1, 0);
+    if(msgsnd(id, &msg, strlen(msg.mtext) + 1, 0) == -1) {
+        perror("msgsnd");
+    } else {
+        fprintf(stdout, "Recver finished normally\n");
+    }
     exit(0);
 }
