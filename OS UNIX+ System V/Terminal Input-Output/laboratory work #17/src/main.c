@@ -10,7 +10,7 @@ void backspace(int fd) { write(fd, backspace_seq, 3); }
 void write_symbol(int fd, char ch) { write(fd, &ch, 1); }
 
 int main(int argc, char *argv[]) {
-    int fd = open("/dev/tty", O_RDWR);
+    int fd = open(ctermid(NULL), O_RDWR);
     if(fd == -1) {
         perror("open");
         return -1;

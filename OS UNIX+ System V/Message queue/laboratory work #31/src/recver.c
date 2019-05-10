@@ -8,22 +8,21 @@
 
 #define MSGSIZE 512
 
-int id;
-pid_t sender_pid;
-pid_t my_pid;
-struct msgbuf {
-    long mtype;
-    char mtext[MSGSIZE];
-} msg;
+int stop = 0;
 
-void finish_ipc();
-
-void sigint(int signo) { finish_ipc(); }
+void sigint(int signo) { stop = 1; }
 
 int main(int argc, char *argv[]) {
 
     key_t key;
     int i;
+    int id;
+    pid_t sender_pid;
+    pid_t my_pid;
+    struct msgbuf {
+        long mtype;
+        char mtext[MSGSIZE];
+    } msg;
 
     my_pid = getpid();
     fprintf(stdout, "My name is %s and my pid is: %d\n", argv[0], my_pid);
@@ -41,8 +40,12 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-    signal(SIGINT, sigint);
-    while(1) {
+    struct sigaction act;
+    act.sa_handler = sigint;
+    sigemptyset(&act.sa_mask);
+    act.sa_flags &= ~SA_RESTART;
+    sigaction(SIGINT, &act, NULL);
+    while(!stop) {
         if(msgrcv(id, &msg, MSGSIZE, my_pid, 0) == -1) {
             break;
         }
@@ -52,17 +55,14 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "%s: %s", argv[0], msg.mtext);
     }
 
-    finish_ipc();
-    return 0;
-}
-
-void finish_ipc() {
-    msg.mtype = sender_pid;
-    sprintf(msg.mtext, "%d", my_pid);
-    if(msgsnd(id, &msg, strlen(msg.mtext) + 1, 0) == -1) {
-        perror("msgsnd");
-    } else {
-        fprintf(stdout, "Recver finished normally\n");
+    if(stop) {
+        msg.mtype = sender_pid;
+        sprintf(msg.mtext, "%d", my_pid);
+        if (msgsnd(id, &msg, strlen(msg.mtext) + 1, 0) == -1) {
+            perror("msgsnd");
+        } else {
+            fprintf(stdout, "Recver finished normally\n");
+        }
     }
-    exit(0);
+    return 0;
 }

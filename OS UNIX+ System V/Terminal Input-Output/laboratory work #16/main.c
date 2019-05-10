@@ -8,7 +8,7 @@ int main() {
     char answer;
     struct termios term, term_bak, real_term;
     /* set non-canonical mode */
-    int fd = open("/dev/tty", O_RDWR);
+    int fd = open(ctermid(NULL), O_RDONLY);
     if(tcgetattr(fd, &term) == -1) {
         perror("error");
         close(fd);

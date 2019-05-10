@@ -3,6 +3,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <signal.h>
+#include <errno.h>
 
 #define STRINGS_MAX_NUM 100
 #define TIME_OUT 5
@@ -15,7 +16,7 @@ char *string;
 int create_search_table(off_t *indents, off_t *strings_length);
 void print_file();
 
-void sig_alarm(int signo);
+void sig_alarm(int signo){ }
 
 int main(int argc, char *argv[]) {
     /* open file */
@@ -54,10 +55,16 @@ int main(int argc, char *argv[]) {
     while (1) {
         alarm(TIME_OUT);
         printf("Input string number: ");
-        if(scanf("%d", &num) != 1 || num == 0) {
+        if(scanf("%d", &num) != 1) {
+            if(errno == EINTR) {
+                print_file();
+            }
             break;
         }
         alarm(0);
+        if(num == 0) {
+            break;
+        }
         if(num > strings_num || num < 0) {
             fprintf(stderr, "Unexpected string number!\n");
             continue;
@@ -72,7 +79,6 @@ int main(int argc, char *argv[]) {
             break;
         }
     }
-
     free(string);
     exit(0);
 }
@@ -121,10 +127,4 @@ void print_file() {
             break;
         }
     }
-}
-
-void sig_alarm(int signo) {
-    print_file();
-    free(string);
-    exit(0);
 }
