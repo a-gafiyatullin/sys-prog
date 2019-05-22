@@ -43,7 +43,7 @@ int main(int argc, char *argv[]) {
     struct sigaction sig;
     sigemptyset(&sig.sa_mask);
     sig.sa_handler = sig_alarm;
-    sig.sa_flags = 0;
+    sig.sa_flags &= ~SA_RESTART;
     if(sigaction(SIGALRM, &sig, NULL) == -1) {
         perror("sigaction");
         exit(-1);

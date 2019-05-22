@@ -8,35 +8,42 @@
 
 #define MSGSIZE 512
 
+#define ACCEPT 1
+
 int stop = 0;
 
 void sigint(int signo) { stop = 1; }
 
-int main(int argc, char *argv[]) {
+int main() {
 
     key_t key;
-    int i;
-    int id;
+    int id, i;
     pid_t sender_pid;
-    pid_t my_pid;
+    pid_t my_pid = getpid();
+
     struct msgbuf {
         long mtype;
         char mtext[MSGSIZE];
     } msg;
 
-    my_pid = getpid();
-    fprintf(stdout, "My name is %s and my pid is: %d\n", argv[0], my_pid);
-    fprintf(stdout, "Sender pid: ");
-    if(fscanf(stdin, "%d", &sender_pid) != 1) {
-        perror("fscanf");
-        return -1;
-    }
+    fprintf(stdout, "My pid is: %d\n", my_pid);
+
     if((key = ftok(".", 'q')) == -1) {
         perror("ftok");
         return -1;
     }
     if((id = msgget(key, 0)) == -1) {
         perror("msgget");
+        return -1;
+    }
+
+    msg.mtype = ACCEPT;
+    sprintf(msg.mtext, "%d", my_pid);
+    msgsnd(id, &msg, strlen(msg.mtext) + 1, 0);
+    msgrcv(id, &msg, MSGSIZE, my_pid, 0);
+    sender_pid = atoi(msg.mtext);
+    if(sender_pid == -1) {
+        fprintf(stderr, "Can't connect to recver!\n");
         return -1;
     }
 
@@ -52,7 +59,7 @@ int main(int argc, char *argv[]) {
         if(msg.mtext[0] == 'F' && msg.mtext[1] == '\0') {
             break;
         }
-        fprintf(stderr, "%s: %s", argv[0], msg.mtext);
+        fprintf(stderr, "%d: %s", my_pid, msg.mtext);
     }
 
     if(stop) {
@@ -64,5 +71,6 @@ int main(int argc, char *argv[]) {
             fprintf(stdout, "Recver finished normally\n");
         }
     }
+
     return 0;
 }

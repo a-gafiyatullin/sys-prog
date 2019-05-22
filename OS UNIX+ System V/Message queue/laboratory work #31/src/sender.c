@@ -6,27 +6,33 @@
 #include <fcntl.h>
 
 #define MSGSIZE 512
+#define MAX_SENDRERS_NUM 255
+
+#define ACCEPT 1
+
+#define TRUE 1
+#define FALSE 0
 
 int set_non_blocking_input();
 
-int main(int argc, char *argv[]) {
+int main() {
 
     key_t key;
-    int id;
-    int recv_pid;
-    int alive_recvers_num = argc - 1;
-    pid_t pid = getpid();
+    int id, i;
+    int senders_num = 0;
+    int alive_recvers_num = senders_num;
+    pid_t  pid = getpid(), recv_pid;
+
     struct recver_info {
         pid_t pid;
         int is_alive;
-    } *recvers;
+    } recvers[MAX_SENDRERS_NUM];
+
     struct msgbuf {
         long mtype;
         char mtext[MSGSIZE];
     } msg;
-    int i;
 
-    fprintf(stdout, "My pid is: %d\n", pid);
     if((key = ftok(".", 'q')) == -1) {
         perror("ftok");
         return -1;
@@ -35,24 +41,37 @@ int main(int argc, char *argv[]) {
         perror("msgget");
         return -1;
     }
-    if((recvers = malloc(sizeof(struct recver_info) * (argc - 1))) == NULL) {
-        perror("malloc");
-        return -1;
-    }
-    for(i = 0; i < argc - 1; i++) {
-        recvers[i].pid = atoi(argv[i + 1]);
-        recvers[i].is_alive = 1;
-    }
 
     if(set_non_blocking_input() == -1) {
         return -1;
     }
+
+    for (i = 0; i < MAX_SENDRERS_NUM; ++i) {
+        recvers[i].is_alive = FALSE;
+    }
     while(!feof(stdin)) {
+        if(msgrcv(id, &msg, MSGSIZE, ACCEPT, IPC_NOWAIT) != -1) {
+            msg.mtype = atoi(msg.mtext);
+            i = 0;
+            while (i < MAX_SENDRERS_NUM && recvers[i].is_alive) {
+                i++;
+            }
+            if(i != MAX_SENDRERS_NUM) {
+                recvers[i].pid = msg.mtype;
+                recvers[i].is_alive = TRUE;
+                sprintf(msg.mtext, "%d", pid);
+                ++alive_recvers_num;
+            } else {
+                sprintf(msg.mtext, "-1");
+            }
+            senders_num = i + 1;
+            msgsnd(id, &msg, strlen(msg.mtext) + 1, 0);
+        }
         if(msgrcv(id, &msg, MSGSIZE, pid, IPC_NOWAIT) != -1) {
             recv_pid = atoi(msg.mtext);
-            for(i = 0; i < argc - 1; i++) {
+            for(i = 0; i < senders_num; i++) {
                 if(recvers[i].pid == recv_pid) {
-                    recvers[i].is_alive = 0;
+                    recvers[i].is_alive = FALSE;
                     break;
                 }
             }
@@ -64,7 +83,7 @@ int main(int argc, char *argv[]) {
         if(fgets(msg.mtext, MSGSIZE, stdin) == NULL) {
             continue;
         }
-        for(i = 0; i < argc - 1; i++) {
+        for(i = 0; i < senders_num; i++) {
             if(recvers[i].is_alive) {
                 msg.mtype = recvers[i].pid;
                 msgsnd(id, &msg, strlen(msg.mtext) + 1, 0);
@@ -75,7 +94,7 @@ int main(int argc, char *argv[]) {
     if(alive_recvers_num != 0) {
         msg.mtext[0] = 'F';
         msg.mtext[1] = '\0';
-        for (i = 0; i < argc - 1; i++) {
+        for (i = 0; i < senders_num; i++) {
             if(recvers[i].is_alive) {
                 msg.mtype = recvers[i].pid;
             }
@@ -87,7 +106,7 @@ int main(int argc, char *argv[]) {
     } else {
         fprintf(stdout, "Sender finished normally\n");
     }
-    free(recvers);
+
     return 0;
 }
 
