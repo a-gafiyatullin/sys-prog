@@ -25,6 +25,9 @@ int main() {
     }
 
     msg.mtype = getpid();
+    msg.mtext[0] = 'R';
+    msg.mtext[1] = '\0';
+    msgsnd(id, &msg, strlen(msg.mtext) + 1, 0);
     while (fgets(msg.mtext, MSGSIZE, stdin)) {
         msgsnd(id, &msg, strlen(msg.mtext) + 1, 0);
     }
