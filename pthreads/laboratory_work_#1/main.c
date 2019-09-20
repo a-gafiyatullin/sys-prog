@@ -1,5 +1,6 @@
 #include <pthread.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 void *print_text(void *arg) {
   printf("1. It's the child thread!\n");
@@ -15,8 +16,8 @@ int main() {
   pthread_t thread;
 
   if (pthread_create(&thread, NULL, print_text, NULL) != 0) {
-    fprintf(stderr, "Error of the thread creation!\n ");
-    return -1;
+    fprintf(stderr, "Error of the thread creation!\n");
+    exit(-1);
   }
 
   printf("6. It's the parent thread!\n");

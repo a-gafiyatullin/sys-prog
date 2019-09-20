@@ -1,12 +1,17 @@
 #include <pthread.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #define THREAD_POOL_SIZE 4
+
+char *strings[] = {"String №1", "String №2", "String №3", "String №4",
+                   "String №5", "String №6", "String №7", "String №8"};
 
 typedef struct string_seq {
   unsigned int size;
   char **strings;
 } string_seq;
+string_seq data[THREAD_POOL_SIZE];
 
 void *print_text(void *arg) {
   string_seq *seq = (string_seq *)arg;
@@ -20,11 +25,8 @@ void *print_text(void *arg) {
 
 int main() {
   pthread_t threads[THREAD_POOL_SIZE];
-  string_seq data[THREAD_POOL_SIZE];
 
   /*----------------- EXAMPLE OF THE USAGE(A BAD CODE) ---------------------*/
-  char *strings[] = {"String №1", "String №2", "String №3", "String №4",
-                     "String №5", "String №6", "String №7", "String №8"};
   data[0].size = 2;
   data[0].strings = strings;
   data[1].size = 3;
@@ -38,7 +40,7 @@ int main() {
   for (int i = 0; i < THREAD_POOL_SIZE; i++) {
     if (pthread_create(threads + i, NULL, print_text, data + i) != 0) {
       fprintf(stderr, "Error of the thread creation!\n");
-      return -1;
+      exit(-1);
     }
   }
 
