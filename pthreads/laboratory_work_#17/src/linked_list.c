@@ -63,9 +63,8 @@ void l_erase(struct linked_list *list) {
 }
 
 void l_push_front(struct linked_list *list, char *str) {
-  struct node *new_head = push_front(list->head, str);
   pthread_mutex_lock(&list->mutex);
-  list->head = new_head;
+  list->head = push_front(list->head, str);
   pthread_mutex_unlock(&list->mutex);
 }
 
@@ -123,6 +122,7 @@ void *l_sort(void *arg) {
   time_t prev_t = time(NULL);
 
   while (1) {
+    sleep(task->delay);
     pthread_mutex_lock(&list->mutex);
     if (task->sort_state == STOP) { // check if sort thread can be canceled
       pthread_mutex_unlock(&list->mutex);
