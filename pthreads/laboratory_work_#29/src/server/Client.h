@@ -1,3 +1,8 @@
 #pragma once
 
-class Client {};
+class Client {
+private:
+  int socket;
+
+public:
+};
