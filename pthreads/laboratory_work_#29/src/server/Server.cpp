@@ -1,5 +1,7 @@
 #include "Server.h"
 
+std::shared_ptr<Server> Server::instance = nullptr;
+
 Server::Server(const in_port_t &port)
     : socket(::socket(AF_INET, SOCK_STREAM, 0)) {
   if (socket < 0) {
@@ -27,16 +29,26 @@ Server::Server(const in_port_t &port)
   }
 }
 
-Server Server::getInstance(const in_port_t &port) {
-  return (instance == nullptr ? *(instance = new Server(port)) : *instance);
-}
-
-std::optional<sockaddr_in> Server::listen() {
-  sockaddr_in remote{};
-  socklen_t sockaddr_in_len = SOCKADDR_IN_LEN;
-  if(accept(socket, (sockaddr *)&remote, &sockaddr_in_len) < 0) {
-    return {};
+std::shared_ptr<Server> &Server::getInstance(const in_port_t &port) {
+  if (instance == nullptr) {
+    instance.reset(new Server(port));
   }
 
-  return remote;
+  return instance;
+}
+
+int Server::accept() {
+  sockaddr_in remote{};
+  socklen_t sockaddr_in_len = SOCKADDR_IN_LEN;
+  int client_socket;
+  if ((client_socket =
+           ::accept(socket, (sockaddr *)&remote, &sockaddr_in_len)) < 0) {
+    return client_socket;
+  }
+
+  clients.insert(
+      std::make_pair(client_socket, std::make_shared<Client>(client_socket)));
+  client_sockets.push_back(client_socket);
+
+  return client_socket;
 }
