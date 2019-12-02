@@ -39,4 +39,6 @@ public:
   [[nodiscard]] inline int getMaxClientSocket() const {
     return *std::max_element(client_sockets.begin(), client_sockets.end());
   }
+
+  [[nodiscard]] fd_set getFdSet() const;
 };

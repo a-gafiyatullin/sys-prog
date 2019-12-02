@@ -1,41 +1,51 @@
 #include "server/Server.h"
+#include <csignal>
+#include <getopt.h>
 #include <iostream>
 #include <sys/select.h>
 
-int main() {
-  in_port_t port = 8888;
+bool stop = false;
 
-  auto server = Server::getInstance(8888);
+void sig_stop(int) { stop = true; }
+
+int main(int argc, char *argv[]) {
+  std::string error_msg = "usage: http-proxy [-p port-number]";
+  if (argc < 2) {
+    std::cerr << error_msg << std::endl;
+    return -1;
+  }
+
+  in_port_t port = 0;
+  char c;
+  while ((c = getopt(argc, argv, "p:")) != EOF) {
+    switch (c) {
+    case 'p':
+      port = atoi(optarg);
+      break;
+    default:
+      std::cerr << error_msg << std::endl;
+      return -1;
+    }
+  }
+
+  signal(SIGINT, sig_stop);
+
+  std::cout << "http-proxy started at port " << port << std::endl;
+  auto server = Server::getInstance(port);
   timeval timevl;
   timevl.tv_sec = 0;
   timevl.tv_usec = 0;
-  while (true) {
-    int client;
-    if ((client = server->accept()) < 0) {
+
+  while (!stop) {
+    if (server->accept() < 0) {
       continue;
     }
-    fd_set sockets;
-    FD_ZERO(&sockets);
-    for (auto client_socket : server->getClientSockets()) {
-      FD_SET(client_socket, &sockets);
-    }
+    auto sockets = server->getFdSet();
     if (select(server->getMaxClientSocket(), &sockets, nullptr, nullptr,
                &timevl) > 0) {
       for (auto client_socket : server->getClientSockets()) {
         if (FD_ISSET(client_socket, &sockets)) {
           auto req = server->getClient(client_socket)->readMsg();
-          if (req.second == 0) {
-            std::cout << req.first->getMinorVersion() << std::endl;
-            std::cout << req.first->getMethod().value_or(" ") << std::endl;
-            std::cout << req.first->getPath().value_or(" ") << std::endl;
-            for (size_t i = 0; i != req.first->getHeaders().second; ++i) {
-              printf("%.*s: %.*s\n",
-                     (int)req.first->getHeaders().first[i].name_len,
-                     req.first->getHeaders().first[i].name,
-                     (int)req.first->getHeaders().first[i].value_len,
-                     req.first->getHeaders().first[i].value);
-            }
-          }
         }
       }
     }

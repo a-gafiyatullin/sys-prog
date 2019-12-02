@@ -31,3 +31,8 @@ std::optional<std::string> HttpRequestInfo::getPath() const {
     return std::string(path, path_len);
   }
 }
+
+std::string HttpRequestInfo::getURL() const {
+  return std::string(headers[HOST_INDEX].value, headers[HOST_INDEX].value_len) +
+         getPath().value_or("");
+}

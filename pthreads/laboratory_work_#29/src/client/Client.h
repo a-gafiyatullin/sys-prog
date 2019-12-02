@@ -1,8 +1,8 @@
 #pragma once
 
 #include "../utility/PicoHttpParser.h"
-#include <sys/socket.h>
 #include <memory>
+#include <sys/socket.h>
 
 class Client {
 private:

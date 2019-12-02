@@ -52,3 +52,11 @@ int Server::accept() {
 
   return client_socket;
 }
+
+fd_set Server::getFdSet() const {
+  fd_set sockets;
+  FD_ZERO(&sockets);
+  for (auto client_socket : getClientSockets()) {
+    FD_SET(client_socket, &sockets);
+  }
+}

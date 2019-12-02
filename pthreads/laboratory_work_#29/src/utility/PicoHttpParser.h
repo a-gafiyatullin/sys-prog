@@ -19,6 +19,8 @@ private:
   phr_header headers[HEADERS_NUM];
   char *method, *path;
 
+  static const int HOST_INDEX = 0;
+
 public:
   HttpRequestInfo();
 
@@ -33,8 +35,11 @@ public:
   }
 
   [[nodiscard]] inline std::pair<void *, size_t> getRequestBuffer() const {
-    return std::make_pair((void *)(request + total_req_len), BUFSIZ - total_req_len);
+    return std::make_pair((void *)(request + total_req_len),
+                          BUFSIZ - total_req_len);
   }
 
   int parseRequest(const size_t &curr_buff_len);
+
+  [[nodiscard]] std::string getURL() const;
 };
