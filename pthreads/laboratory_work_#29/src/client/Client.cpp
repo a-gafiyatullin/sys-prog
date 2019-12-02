@@ -1,6 +1,12 @@
 #include "Client.h"
 
-Client::Client(const int &socket) : socket(socket), curr_req(nullptr) {}
+Client::Client(const int &socket)
+    : socket(socket), curr_req(nullptr),
+      resource_socket(::socket(AF_INET, SOCK_STREAM, 0)) {
+  if (socket < 0) {
+    throw std::out_of_range("Client::resource_socket < 0!");
+  }
+}
 
 std::pair<std::shared_ptr<HttpRequestInfo>, int> Client::readMsg() {
   if (curr_req == nullptr) {
@@ -29,4 +35,9 @@ std::pair<std::shared_ptr<HttpRequestInfo>, int> Client::readMsg() {
   }
 
   return std::make_pair(nullptr, error);
+}
+
+Client::~Client() {
+  close(socket);
+  close(resource_socket);
 }

@@ -46,6 +46,14 @@ int main(int argc, char *argv[]) {
       for (auto client_socket : server->getClientSockets()) {
         if (FD_ISSET(client_socket, &sockets)) {
           auto req = server->getClient(client_socket)->readMsg();
+#ifdef DEBUG
+          if (req.second == 0) {
+            std::cout << "Access to resource: "
+                      << req.first->getPath().value_or("") << std::endl;
+          } else {
+            std::cout << "Getting full request..." << std::endl;
+          }
+#endif
         }
       }
     }

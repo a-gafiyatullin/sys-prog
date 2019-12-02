@@ -9,6 +9,7 @@
 #include <optional>
 #include <stdexcept>
 #include <system_error>
+#include <unistd.h>
 
 class Server {
 private:
@@ -41,4 +42,6 @@ public:
   }
 
   [[nodiscard]] fd_set getFdSet() const;
+
+  ~Server() { close(socket); }
 };

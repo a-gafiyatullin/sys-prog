@@ -16,16 +16,16 @@ Server::Server(const in_port_t &port)
   address.sin_addr.s_addr = INADDR_ANY;
   if (bind(socket, (sockaddr *)&address, SOCKADDR_IN_LEN) < 0) {
     throw std::system_error(std::error_code(errno, std::system_category()),
-                            "Server: cannot bind port!");
+                            "Server::cannot bind port!");
   }
   if (::listen(socket, SOMAXCONN) < 0) {
     throw std::system_error(std::error_code(errno, std::system_category()),
-                            "Server: cannot listen socket!");
+                            "Server::cannot listen socket!");
   }
   if (fcntl(socket, F_SETFL, O_NONBLOCK) < 0) {
     throw std::system_error(
         std::error_code(errno, std::system_category()),
-        "Server: cannot set socket in to the non-blocking mode!");
+        "Server::cannot set socket in to the non-blocking mode!");
   }
 }
 
@@ -59,4 +59,6 @@ fd_set Server::getFdSet() const {
   for (auto client_socket : getClientSockets()) {
     FD_SET(client_socket, &sockets);
   }
+
+  return sockets;
 }
