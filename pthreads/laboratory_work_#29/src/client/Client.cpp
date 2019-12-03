@@ -1,4 +1,5 @@
 #include "Client.h"
+#include <iostream>
 
 Client::Client(const int &socket)
     : socket(socket), curr_req(nullptr),
@@ -8,7 +9,7 @@ Client::Client(const int &socket)
   }
 }
 
-std::pair<std::shared_ptr<HttpRequestInfo>, int> Client::readMsg() {
+std::pair<std::shared_ptr<HttpRequestInfo>, int> Client::readRequest() {
   if (curr_req == nullptr) {
     curr_req = std::make_shared<HttpRequestInfo>();
   }
@@ -41,3 +42,5 @@ Client::~Client() {
   close(socket);
   close(resource_socket);
 }
+
+bool Client::sendRequest(const std::shared_ptr<HttpRequestInfo> &request) {}

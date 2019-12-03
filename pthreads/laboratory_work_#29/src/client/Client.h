@@ -16,7 +16,11 @@ private:
 public:
   explicit Client(const int &socket);
 
-  [[nodiscard]] std::pair<std::shared_ptr<HttpRequestInfo>, int> readMsg();
+  [[nodiscard]] std::pair<std::shared_ptr<HttpRequestInfo>, int> readRequest();
+
+  bool sendRequest(const std::shared_ptr<HttpRequestInfo> &request);
+
+  [[nodiscard]] inline int getResourceSocket() const { return resource_socket; }
 
   ~Client();
 };

@@ -32,7 +32,7 @@ int main(int argc, char *argv[]) {
 
   std::cout << "http-proxy started at port " << port << std::endl;
   auto server = Server::getInstance(port);
-  timeval timevl;
+  timeval timevl{};
   timevl.tv_sec = 0;
   timevl.tv_usec = 0;
 
@@ -45,15 +45,26 @@ int main(int argc, char *argv[]) {
                &timevl) > 0) {
       for (auto client_socket : server->getClientSockets()) {
         if (FD_ISSET(client_socket, &sockets)) {
-          auto req = server->getClient(client_socket)->readMsg();
-#ifdef DEBUG
-          if (req.second == 0) {
-            std::cout << "Access to resource: "
-                      << req.first->getPath().value_or("") << std::endl;
-          } else {
-            std::cout << "Getting full request..." << std::endl;
+          auto curr_client = server->getClient(client_socket);
+          auto req = curr_client->readRequest();
+          if (req.second == -1) {
+            server->deleteClient(client_socket);
+            continue;
           }
+#ifdef DEBUG1
+          std::cout << "Access to resource: "
+                    << req.first->getResource().value_or(
+                           "Getting full request...")
+                    << std::endl;
 #endif
+#ifdef DEBUG2
+          std::cout << req.first->requestToString().value_or(
+                           "Getting full request...")
+                    << std::endl;
+#endif
+          if (req.second == 0) {
+            server->addClientResourceSocket(curr_client);
+          }
         }
       }
     }

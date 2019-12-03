@@ -24,15 +24,33 @@ std::optional<std::string> HttpRequestInfo::getMethod() const {
   }
 }
 
-std::optional<std::string> HttpRequestInfo::getPath() const {
+std::optional<std::string> HttpRequestInfo::getResource() const {
+  auto url = getURL();
+  auto host = getHostName();
+  if (url.has_value() && host.has_value()) {
+    auto host_name = url.value().find(host.value());
+    if (host_name != std::string::npos) {
+      return url.value().substr(host_name + host.value().length() + 1);
+    } else {
+      return {};
+    }
+  } else {
+    return {};
+  }
+}
+
+std::optional<std::string> HttpRequestInfo::getURL() const {
   if (path == nullptr) {
     return {};
   } else {
     return std::string(path, path_len);
   }
 }
-
-std::string HttpRequestInfo::getURL() const {
-  return std::string(headers[HOST_INDEX].value, headers[HOST_INDEX].value_len) +
-         getPath().value_or("");
+std::optional<std::string> HttpRequestInfo::getHostName() const {
+  if (path == nullptr || method == nullptr) {
+    return {};
+  } else {
+    return std::string(headers[HOST_INDEX].value,
+                       headers[HOST_INDEX].value_len);
+  }
 }

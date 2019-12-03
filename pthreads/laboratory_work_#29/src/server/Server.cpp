@@ -59,6 +59,48 @@ fd_set Server::getFdSet() const {
   for (auto client_socket : getClientSockets()) {
     FD_SET(client_socket, &sockets);
   }
+  for (auto resource_socket : getClientResourceSockets()) {
+    FD_SET(resource_socket, &sockets);
+  }
 
   return sockets;
+}
+
+void Server::deleteClient(const int &socket) {
+  auto client_ptr = find(client_sockets.begin(), client_sockets.end(), socket);
+  if (client_ptr != client_sockets.end()) {
+    client_sockets.erase(client_ptr);
+  }
+}
+
+void Server::deleteClientResourceSocket(const int &socket) {
+  auto client_ptr =
+      find(resource_sockets.begin(), resource_sockets.end(), socket);
+  if (client_ptr != resource_sockets.end()) {
+    resource_sockets.erase(client_ptr);
+  }
+}
+
+int Server::getMaxClientSocket() const {
+  auto client_socket =
+      std::max_element(client_sockets.begin(), client_sockets.end());
+  auto resource_socket =
+      std::max_element(resource_sockets.begin(), resource_sockets.end());
+  if (client_socket == client_sockets.end() &&
+      resource_socket == resource_sockets.end()) {
+    return 0;
+  } else if (client_socket != client_sockets.end() &&
+             resource_socket == resource_sockets.end()) {
+    return *client_socket;
+  } else if (client_socket == client_sockets.end() &&
+             resource_socket != resource_sockets.end()) {
+    return *resource_socket;
+  } else {
+    return std::max(*client_socket, *resource_socket);
+  }
+}
+
+void Server::addClientResourceSocket(const std::shared_ptr<Client> &client) {
+  clients.insert(std::make_pair(client->getResourceSocket(), client));
+  resource_sockets.push_back(client->getResourceSocket());
 }

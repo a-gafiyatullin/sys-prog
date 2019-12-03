@@ -26,7 +26,9 @@ public:
 
   [[nodiscard]] std::optional<std::string> getMethod() const;
 
-  [[nodiscard]] std::optional<std::string> getPath() const;
+  [[nodiscard]] std::optional<std::string> getResource() const;
+
+  [[nodiscard]] std::optional<std::string> getHostName() const;
 
   [[nodiscard]] inline int getMinorVersion() const { return minor_version; }
 
@@ -41,5 +43,9 @@ public:
 
   int parseRequest(const size_t &curr_buff_len);
 
-  [[nodiscard]] std::string getURL() const;
+  [[nodiscard]] std::optional<std::string> getURL() const;
+
+  [[nodiscard]] inline std::optional<std::string> requestToString() const {
+    return std::string(request, total_req_len);
+  }
 };
