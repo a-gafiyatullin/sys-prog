@@ -9,5 +9,5 @@ add_executable(laboratory_work__29 src/client/Client.cpp
         lib/picohttpparser/picohttpparser.h lib/picohttpparser/picohttpparser.c)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
-    target_compile_definitions(laboratory_work__29 PUBLIC -DDEBUG1)
+    target_compile_definitions(laboratory_work__29 PUBLIC -DDEBUG)
 endif()

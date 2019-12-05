@@ -16,7 +16,6 @@ private:
   static std::shared_ptr<Server> instance;
   int socket;
   sockaddr_in address{};
-  static const size_t SOCKADDR_IN_LEN = sizeof(address);
   std::map<int, std::shared_ptr<Client>> clients;
   std::vector<int> client_sockets;
   std::vector<int> resource_sockets;
@@ -34,9 +33,7 @@ public:
     return clients[socket];
   }
 
-  void deleteClient(const int &socket);
-
-  void deleteClientResourceSocket(const int &socket);
+  void deleteClientSockets(const int &socket);
 
   [[nodiscard]] inline std::vector<int> getClientSockets() const {
     return client_sockets;

@@ -19,7 +19,10 @@ private:
   phr_header headers[HEADERS_NUM];
   char *method, *path;
 
-  static const int HOST_INDEX = 0;
+  static const std::string HOST_HEADER;
+  static const std::vector<std::string> user_headers_names;
+
+  [[nodiscard]] const phr_header *getHeader(const std::string &header) const;
 
 public:
   HttpRequestInfo();
@@ -31,10 +34,6 @@ public:
   [[nodiscard]] std::optional<std::string> getHostName() const;
 
   [[nodiscard]] inline int getMinorVersion() const { return minor_version; }
-
-  [[nodiscard]] inline std::pair<phr_header *, size_t> getHeaders() const {
-    return std::make_pair((phr_header *)headers, headers_num);
-  }
 
   [[nodiscard]] inline std::pair<void *, size_t> getRequestBuffer() const {
     return std::make_pair((void *)(request + total_req_len),
@@ -48,4 +47,6 @@ public:
   [[nodiscard]] inline std::optional<std::string> requestToString() const {
     return std::string(request, total_req_len);
   }
+
+  [[nodiscard]] std::optional<std::string> getUserHeaders() const;
 };

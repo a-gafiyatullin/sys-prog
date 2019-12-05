@@ -14,7 +14,7 @@ Server::Server(const in_port_t &port)
   address.sin_family = AF_INET;
   address.sin_port = htons(port);
   address.sin_addr.s_addr = INADDR_ANY;
-  if (bind(socket, (sockaddr *)&address, SOCKADDR_IN_LEN) < 0) {
+  if (bind(socket, (sockaddr *)&address, sizeof(sockaddr_in)) < 0) {
     throw std::system_error(std::error_code(errno, std::system_category()),
                             "Server::cannot bind port!");
   }
@@ -39,7 +39,7 @@ std::shared_ptr<Server> &Server::getInstance(const in_port_t &port) {
 
 int Server::accept() {
   sockaddr_in remote{};
-  socklen_t sockaddr_in_len = SOCKADDR_IN_LEN;
+  socklen_t sockaddr_in_len = sizeof(sockaddr_in);
   int client_socket;
   if ((client_socket =
            ::accept(socket, (sockaddr *)&remote, &sockaddr_in_len)) < 0) {
@@ -66,18 +66,39 @@ fd_set Server::getFdSet() const {
   return sockets;
 }
 
-void Server::deleteClient(const int &socket) {
-  auto client_ptr = find(client_sockets.begin(), client_sockets.end(), socket);
-  if (client_ptr != client_sockets.end()) {
-    client_sockets.erase(client_ptr);
+void Server::deleteClientSockets(const int &socket) {
+  auto client = clients.find(socket);
+  int client_socket = 0;
+  int resource_socket = 0;
+  if (client != clients.end()) {
+    clients.erase(client);
+    if (client->second->getSocket() == socket) {
+      client_socket = socket;
+      resource_socket = client->second->getResourceSocket();
+      auto resource = clients.find(resource_socket);
+      if (resource != clients.end()) {
+        clients.erase(resource);
+      }
+    } else {
+      resource_socket = socket;
+      client_socket = client->second->getSocket();
+      auto main = clients.find(client_socket);
+      if (main != clients.end()) {
+        clients.erase(main);
+      }
+    }
+  } else {
+    return;
   }
-}
-
-void Server::deleteClientResourceSocket(const int &socket) {
-  auto client_ptr =
-      find(resource_sockets.begin(), resource_sockets.end(), socket);
-  if (client_ptr != resource_sockets.end()) {
-    resource_sockets.erase(client_ptr);
+  auto client_socket_iter =
+      find(client_sockets.begin(), client_sockets.end(), client_socket);
+  if (client_socket_iter != client_sockets.end()) {
+    client_sockets.erase(client_socket_iter);
+  }
+  auto resource_socket_iter =
+      find(resource_sockets.begin(), resource_sockets.end(), resource_socket);
+  if (resource_socket_iter != resource_sockets.end()) {
+    resource_sockets.erase(resource_socket_iter);
   }
 }
 

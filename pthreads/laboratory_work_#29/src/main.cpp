@@ -37,33 +37,44 @@ int main(int argc, char *argv[]) {
   timevl.tv_usec = 0;
 
   while (!stop) {
-    if (server->accept() < 0) {
-      continue;
-    }
+    server->accept();
     auto sockets = server->getFdSet();
-    if (select(server->getMaxClientSocket(), &sockets, nullptr, nullptr,
+    if (select(server->getMaxClientSocket() + 1, &sockets, nullptr, nullptr,
                &timevl) > 0) {
-      for (auto client_socket : server->getClientSockets()) {
+      for (auto client_socket :
+           server->getClientSockets()) { // check data from sockets that want to
+                                         // establish connection
         if (FD_ISSET(client_socket, &sockets)) {
           auto curr_client = server->getClient(client_socket);
           auto req = curr_client->readRequest();
           if (req.second == -1) {
-            server->deleteClient(client_socket);
+            server->deleteClientSockets(client_socket);
             continue;
           }
-#ifdef DEBUG1
-          std::cout << "Access to resource: "
+#ifdef DEBUG
+          std::cerr << "Access to resource: "
                     << req.first->getResource().value_or(
                            "Getting full request...")
                     << std::endl;
 #endif
-#ifdef DEBUG2
-          std::cout << req.first->requestToString().value_or(
-                           "Getting full request...")
-                    << std::endl;
-#endif
           if (req.second == 0) {
-            server->addClientResourceSocket(curr_client);
+            if (curr_client->sendRequest(req.first)) {
+              server->addClientResourceSocket(curr_client);
+#ifdef DEBUG
+              std::cerr << "Client's resource socket is added to reading!"
+                        << std::endl;
+#endif
+            } else {
+              server->deleteClientSockets(client_socket);
+            }
+          }
+        }
+      }
+      for (auto resource_socket : server->getClientResourceSockets()) {
+        if (FD_ISSET(resource_socket, &sockets)) {
+          auto curr_client = server->getClient(resource_socket);
+          if (!curr_client->proxyingData()) {
+            server->deleteClientSockets(resource_socket);
           }
         }
       }
