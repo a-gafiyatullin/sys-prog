@@ -1,26 +1,26 @@
-#include "PicoHttpParser.h"
+#include "PicoHttpRequest.h"
 
-const std::string HttpRequestInfo::HOST_HEADER = "Host";
-const std::vector<std::string> HttpRequestInfo::user_headers_names = {
+const std::string PicoHttpRequest::HOST_HEADER = "Host";
+const std::vector<std::string> PicoHttpRequest::user_headers_names = {
     "DNT", "User-Agent", "Accept", "Accept-Encoding", "Accept-Language"};
 
-int HttpRequestInfo::parseRequest(const size_t &d_req_len) {
+int PicoHttpRequest::parseData(const size_t &d_req_len) {
   headers_num = HEADERS_NUM;
 
-  int error = phr_parse_request(request, total_req_len + d_req_len,
+  int error = phr_parse_request(data, total_data_len + d_req_len,
                                 (const char **)(&method), &method_len,
                                 (const char **)&path, &path_len, &minor_version,
-                                headers, &headers_num, total_req_len);
-  total_req_len += d_req_len;
+                                headers, &headers_num, total_data_len);
+  total_data_len += d_req_len;
 
   return error;
 }
 
-HttpRequestInfo::HttpRequestInfo()
-    : method_len(0), path_len(0), minor_version(0), method(nullptr),
-      path(nullptr), total_req_len(0), headers_num(HEADERS_NUM) {}
+PicoHttpRequest::PicoHttpRequest()
+    : method_len(0), path_len(0), method(nullptr), path(nullptr),
+      headers_num(HEADERS_NUM), total_data_len(0), minor_version(-1) {}
 
-std::optional<std::string> HttpRequestInfo::getMethod() const {
+std::optional<std::string> PicoHttpRequest::getMethod() const {
   if (method == nullptr) {
     return {};
   } else {
@@ -28,7 +28,7 @@ std::optional<std::string> HttpRequestInfo::getMethod() const {
   }
 }
 
-std::optional<std::string> HttpRequestInfo::getResource() const {
+std::optional<std::string> PicoHttpRequest::getResource() const {
   auto url = getURL();
   auto host = getHostName();
   if (url.has_value() && host.has_value()) {
@@ -43,7 +43,7 @@ std::optional<std::string> HttpRequestInfo::getResource() const {
   }
 }
 
-std::optional<std::string> HttpRequestInfo::getURL() const {
+std::optional<std::string> PicoHttpRequest::getURL() const {
   if (path == nullptr) {
     return {};
   } else {
@@ -51,7 +51,7 @@ std::optional<std::string> HttpRequestInfo::getURL() const {
   }
 }
 
-std::optional<std::string> HttpRequestInfo::getHostName() const {
+std::optional<std::string> PicoHttpRequest::getHostName() const {
   if (path == nullptr || method == nullptr) {
     return {};
   } else {
@@ -64,17 +64,7 @@ std::optional<std::string> HttpRequestInfo::getHostName() const {
   }
 }
 
-const phr_header *HttpRequestInfo::getHeader(const std::string &header) const {
-  for (int i = 0; i < headers_num; i++) {
-    if (std::string(headers[i].name, headers[i].name_len) == header) {
-      return headers + i;
-    }
-  }
-
-  return nullptr;
-}
-
-std::optional<std::string> HttpRequestInfo::getUserHeaders() const {
+std::optional<std::string> PicoHttpRequest::getUserHeaders() const {
   std::string result_headers;
   for (const auto &header : user_headers_names) {
     auto phr = getHeader(header);
@@ -88,4 +78,14 @@ std::optional<std::string> HttpRequestInfo::getUserHeaders() const {
   } else {
     return result_headers;
   }
+}
+
+const phr_header *PicoHttpRequest::getHeader(const std::string &header) const {
+  for (int i = 0; i < headers_num; i++) {
+    if (std::string(headers[i].name, headers[i].name_len) == header) {
+      return headers + i;
+    }
+  }
+
+  return nullptr;
 }

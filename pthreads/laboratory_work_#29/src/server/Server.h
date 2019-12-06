@@ -17,8 +17,10 @@ private:
   int socket;
   sockaddr_in address{};
   std::map<int, std::shared_ptr<Client>> clients;
-  std::vector<int> client_sockets;
+  std::vector<int> request_sockets;
   std::vector<int> resource_sockets;
+
+  std::map<std::string, std::shared_ptr<Data>> cache;
 
   explicit Server(const in_port_t &port);
 
@@ -27,27 +29,37 @@ public:
 
   int accept();
 
-  [[nodiscard]] inline int getSocket() const { return socket; }
+  [[nodiscard]] inline int getServerSocket() const { return socket; }
 
-  [[nodiscard]] inline std::shared_ptr<Client> &getClient(const int &socket) {
-    return clients[socket];
+  [[nodiscard]] inline std::vector<int> getClientRequestSockets() const {
+    return request_sockets;
   }
-
-  void deleteClientSockets(const int &socket);
-
-  [[nodiscard]] inline std::vector<int> getClientSockets() const {
-    return client_sockets;
-  }
-
-  void addClientResourceSocket(const std::shared_ptr<Client> &client);
 
   [[nodiscard]] inline std::vector<int> getClientResourceSockets() const {
     return resource_sockets;
   }
 
+  [[nodiscard]] inline std::shared_ptr<Client> &getClient(const int &socket) {
+    return clients[socket];
+  }
+
+  void deleteClient(const int &socket);
+
+  void addClientResourceSocket(const std::shared_ptr<Client> &client);
+
   [[nodiscard]] int getMaxClientSocket() const;
 
   [[nodiscard]] fd_set getFdSet() const;
+
+  [[nodiscard]] std::shared_ptr<Data>
+  getCachedResource(const std::string &url) const;
+
+  inline void addCacheElement(const std::string &url,
+                              const std::shared_ptr<Data> &data) {
+    cache.insert(std::make_pair(url, data));
+  }
+
+  void sendCachedDataToClients() const;
 
   ~Server() { close(socket); }
 };

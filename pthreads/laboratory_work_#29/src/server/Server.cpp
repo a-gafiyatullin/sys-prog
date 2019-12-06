@@ -48,7 +48,7 @@ int Server::accept() {
 
   clients.insert(
       std::make_pair(client_socket, std::make_shared<Client>(client_socket)));
-  client_sockets.push_back(client_socket);
+  request_sockets.push_back(client_socket);
 
   return client_socket;
 }
@@ -56,8 +56,8 @@ int Server::accept() {
 fd_set Server::getFdSet() const {
   fd_set sockets;
   FD_ZERO(&sockets);
-  for (auto client_socket : getClientSockets()) {
-    FD_SET(client_socket, &sockets);
+  for (auto request_socket : getClientRequestSockets()) {
+    FD_SET(request_socket, &sockets);
   }
   for (auto resource_socket : getClientResourceSockets()) {
     FD_SET(resource_socket, &sockets);
@@ -66,14 +66,14 @@ fd_set Server::getFdSet() const {
   return sockets;
 }
 
-void Server::deleteClientSockets(const int &socket) {
+void Server::deleteClient(const int &socket) {
   auto client = clients.find(socket);
-  int client_socket = 0;
+  int request_socket = 0;
   int resource_socket = 0;
   if (client != clients.end()) {
     clients.erase(client);
     if (client->second->getSocket() == socket) {
-      client_socket = socket;
+      request_socket = socket;
       resource_socket = client->second->getResourceSocket();
       auto resource = clients.find(resource_socket);
       if (resource != clients.end()) {
@@ -81,8 +81,8 @@ void Server::deleteClientSockets(const int &socket) {
       }
     } else {
       resource_socket = socket;
-      client_socket = client->second->getSocket();
-      auto main = clients.find(client_socket);
+      request_socket = client->second->getSocket();
+      auto main = clients.find(request_socket);
       if (main != clients.end()) {
         clients.erase(main);
       }
@@ -90,10 +90,10 @@ void Server::deleteClientSockets(const int &socket) {
   } else {
     return;
   }
-  auto client_socket_iter =
-      find(client_sockets.begin(), client_sockets.end(), client_socket);
-  if (client_socket_iter != client_sockets.end()) {
-    client_sockets.erase(client_socket_iter);
+  auto request_socket_iter =
+      find(request_sockets.begin(), request_sockets.end(), request_socket);
+  if (request_socket_iter != request_sockets.end()) {
+    request_sockets.erase(request_socket_iter);
   }
   auto resource_socket_iter =
       find(resource_sockets.begin(), resource_sockets.end(), resource_socket);
@@ -103,25 +103,35 @@ void Server::deleteClientSockets(const int &socket) {
 }
 
 int Server::getMaxClientSocket() const {
-  auto client_socket =
-      std::max_element(client_sockets.begin(), client_sockets.end());
+  auto request_socket =
+      std::max_element(request_sockets.begin(), request_sockets.end());
   auto resource_socket =
       std::max_element(resource_sockets.begin(), resource_sockets.end());
-  if (client_socket == client_sockets.end() &&
-      resource_socket == resource_sockets.end()) {
-    return 0;
-  } else if (client_socket != client_sockets.end() &&
-             resource_socket == resource_sockets.end()) {
-    return *client_socket;
-  } else if (client_socket == client_sockets.end() &&
-             resource_socket != resource_sockets.end()) {
-    return *resource_socket;
-  } else {
-    return std::max(*client_socket, *resource_socket);
-  }
+
+  int max_request_socket =
+      (request_socket == request_sockets.end() ? 0 : *request_socket);
+  int max_resource_socket =
+      (resource_socket == resource_sockets.end() ? 0 : *resource_socket);
+
+  return std::max(max_resource_socket, max_request_socket);
 }
 
 void Server::addClientResourceSocket(const std::shared_ptr<Client> &client) {
   clients.insert(std::make_pair(client->getResourceSocket(), client));
   resource_sockets.push_back(client->getResourceSocket());
+}
+
+std::shared_ptr<Data> Server::getCachedResource(const std::string &url) const {
+  auto resource = cache.find(url);
+  if (resource == cache.end()) {
+    return nullptr;
+  }
+
+  return resource->second;
+}
+
+void Server::sendCachedDataToClients() const {
+  for (const auto &data : cache) {
+    data.second->sendDataToClients();
+  }
 }

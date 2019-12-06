@@ -1,36 +1,36 @@
 #include "Client.h"
 
 Client::Client(const int &socket)
-    : socket(socket), curr_req(nullptr),
+    : socket(socket), request(nullptr), data(nullptr),
       resource_socket(::socket(AF_INET, SOCK_STREAM, 0)) {
   if (socket < 0) {
     throw std::out_of_range("Client::resource_socket < 0!");
   }
 }
 
-std::pair<std::shared_ptr<HttpRequestInfo>, int> Client::readRequest() {
-  if (curr_req == nullptr) {
-    curr_req = std::make_shared<HttpRequestInfo>();
+std::pair<std::shared_ptr<PicoHttpRequest>, int> Client::readRequest() {
+  if (request == nullptr) {
+    request = std::make_shared<PicoHttpRequest>();
   }
 
-  auto buffer = curr_req->getRequestBuffer();
+  auto buffer = request->getDataBuffer();
   size_t length = recv(socket, buffer.first, buffer.second, 0);
   if (length <= 0) {
-    curr_req = nullptr;
+    request = nullptr;
     return std::make_pair(nullptr, -1);
   }
 
-  int error = curr_req->parseRequest(length);
+  int error = request->parseData(length);
   if (error == -1) {
-    curr_req = nullptr;
+    request = nullptr;
     return std::make_pair(nullptr, -1);
   }
 
   if (error > 0) {
-    std::pair<std::shared_ptr<HttpRequestInfo>, int> rez;
-    rez.first = curr_req;
+    std::pair<std::shared_ptr<PicoHttpRequest>, int> rez;
+    rez.first = request;
     rez.second = 0;
-    curr_req = nullptr;
+    request = nullptr;
     return rez;
   }
 
@@ -42,10 +42,11 @@ Client::~Client() {
   close(resource_socket);
 }
 
-bool Client::sendRequest(const std::shared_ptr<HttpRequestInfo> &request) {
+std::shared_ptr<Data>
+Client::sendRequest(const std::shared_ptr<PicoHttpRequest> &request) {
   if (!request->getResource().has_value() ||
       !request->getHostName().has_value()) {
-    return false;
+    return nullptr;
   }
   auto req = "GET " + request->getResource().value() + " HTTP/1.1\r\n";
   req += "Host: " + request->getHostName().value() + "\r\n";
@@ -59,12 +60,18 @@ bool Client::sendRequest(const std::shared_ptr<HttpRequestInfo> &request) {
 #endif
 
   auto address = parseHostname(request->getHostName().value());
+  int error = 0;
   if (connectResourceServer(address.first, address.second,
                             isDNSHostname(address.first))) {
-    return send(resource_socket, req.c_str(), req.size(), 0) > 0;
+    error = send(resource_socket, req.c_str(), req.size(), 0) > 0;
   }
 
-  return false;
+  if (error <= 0) {
+    return nullptr;
+  }
+
+  data = std::make_shared<Data>();
+  return data;
 }
 
 bool Client::connectResourceServer(const std::string &address,
@@ -105,7 +112,7 @@ Client::parseHostname(const std::string &host) {
   in_port_t port = 80;
 
   if (delimiter != std::string::npos) {
-    port = std::stoi(host.substr(delimiter), nullptr, 10);
+    port = std::stoi(host.substr(delimiter + 1), nullptr, 10);
   }
 
   return std::make_pair(host.substr(0, delimiter), port);
@@ -117,6 +124,9 @@ bool Client::isDNSHostname(const std::string &host) {
 }
 
 bool Client::proxyingData() const {
+  if (data == nullptr) {
+    return false;
+  }
   char buffer[BUFSIZ];
   size_t len = recv(resource_socket, buffer, BUFSIZ, 0);
 
@@ -125,8 +135,44 @@ bool Client::proxyingData() const {
 #endif
 
   if (len <= 0) {
+    data->setCoherence(true);
     return false;
   }
+  std::shared_ptr<char> array(new char[len], std::default_delete<char[]>());
+  memcpy(array.get(), buffer, len);
+  data->pushData(std::make_pair(array, len));
 
   return send(socket, buffer, len, 0) > 0;
+}
+
+bool Client::sendData(
+    const std::pair<std::shared_ptr<char>, size_t> &data) const {
+#ifdef DEBUG
+  std::cerr << "Send data: " << std::string(data.first.get(), data.second)
+            << std::endl;
+#endif
+  return send(socket, data.first.get(), data.second, 0) > 0;
+}
+
+bool Data::sendDataToClients() {
+  std::vector<std::shared_ptr<Client>> to_delete;
+  for (const auto &client : clients) {
+    if (client.second >= data.size()) {
+      if (coherence) {
+        to_delete.push_back(client.first);
+      }
+      continue;
+    }
+    if (!client.first->sendData(data[client.second])) {
+      to_delete.push_back(client.first);
+      continue;
+    }
+    clients[client.first]++;
+  }
+
+  for (auto client : to_delete) {
+    clients.erase(client);
+  }
+
+  return true;
 }

@@ -5,27 +5,38 @@
 #include <string>
 #include <vector>
 
-class HttpRequestInfo {
+class PicoHttpRequest {
 private:
   static const size_t HEADERS_NUM = 100;
 
   size_t method_len;
   size_t path_len;
   size_t headers_num;
-  size_t total_req_len;
-
-  char request[BUFSIZ];
+  size_t total_data_len;
   int minor_version;
-  phr_header headers[HEADERS_NUM];
   char *method, *path;
 
-  static const std::string HOST_HEADER;
+  char data[BUFSIZ];
+  phr_header headers[HEADERS_NUM];
   static const std::vector<std::string> user_headers_names;
+
+  static const std::string HOST_HEADER;
 
   [[nodiscard]] const phr_header *getHeader(const std::string &header) const;
 
 public:
-  HttpRequestInfo();
+  PicoHttpRequest();
+
+  [[nodiscard]] inline int getMinorVersion() const { return minor_version; }
+
+  [[nodiscard]] inline std::optional<std::string> dataToString() const {
+    return std::string(data, total_data_len);
+  }
+
+  [[nodiscard]] inline std::pair<void *, size_t> getDataBuffer() const {
+    return std::make_pair((void *)(data + total_data_len),
+                          BUFSIZ - total_data_len);
+  }
 
   [[nodiscard]] std::optional<std::string> getMethod() const;
 
@@ -33,20 +44,9 @@ public:
 
   [[nodiscard]] std::optional<std::string> getHostName() const;
 
-  [[nodiscard]] inline int getMinorVersion() const { return minor_version; }
-
-  [[nodiscard]] inline std::pair<void *, size_t> getRequestBuffer() const {
-    return std::make_pair((void *)(request + total_req_len),
-                          BUFSIZ - total_req_len);
-  }
-
-  int parseRequest(const size_t &curr_buff_len);
+  int parseData(const size_t &curr_buff_len);
 
   [[nodiscard]] std::optional<std::string> getURL() const;
-
-  [[nodiscard]] inline std::optional<std::string> requestToString() const {
-    return std::string(request, total_req_len);
-  }
 
   [[nodiscard]] std::optional<std::string> getUserHeaders() const;
 };

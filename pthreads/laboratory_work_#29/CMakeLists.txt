@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 add_executable(laboratory_work__29 src/client/Client.cpp
         src/client/Client.h src/server/Server.cpp src/server/Server.h
-        src/main.cpp src/utility/PicoHttpParser.cpp src/utility/PicoHttpParser.h
+        src/main.cpp src/utility/PicoHttpRequest.cpp src/utility/PicoHttpRequest.h
         lib/picohttpparser/picohttpparser.h lib/picohttpparser/picohttpparser.c)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
