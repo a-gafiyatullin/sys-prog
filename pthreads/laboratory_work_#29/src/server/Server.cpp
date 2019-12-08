@@ -1,10 +1,10 @@
 #include "Server.h"
 
-std::shared_ptr<Server> Server::instance = nullptr;
+Server *Server::instance = NULL;
 
 Server::Server(const in_port_t &port)
-    : socket(::socket(AF_INET, SOCK_STREAM, 0)) {
-  if (socket < 0) {
+    : server_socket(socket(AF_INET, SOCK_STREAM, 0)) {
+  if (server_socket < 0) {
     throw std::out_of_range("Server::socket < 0!");
   }
   if (port < 1024) {
@@ -14,124 +14,194 @@ Server::Server(const in_port_t &port)
   address.sin_family = AF_INET;
   address.sin_port = htons(port);
   address.sin_addr.s_addr = INADDR_ANY;
-  if (bind(socket, (sockaddr *)&address, sizeof(sockaddr_in)) < 0) {
-    throw std::system_error(std::error_code(errno, std::system_category()),
-                            "Server::cannot bind port!");
+  if (bind(server_socket, (sockaddr *)&address, sizeof(sockaddr_in)) < 0) {
+    throw std::domain_error("Server::socket cannot bind port!");
   }
-  if (::listen(socket, SOMAXCONN) < 0) {
-    throw std::system_error(std::error_code(errno, std::system_category()),
-                            "Server::cannot listen socket!");
-  }
-  if (fcntl(socket, F_SETFL, O_NONBLOCK) < 0) {
-    throw std::system_error(
-        std::error_code(errno, std::system_category()),
-        "Server::cannot set socket in to the non-blocking mode!");
+  if (::listen(server_socket, SOMAXCONN) < 0) {
+    throw std::domain_error("Server::socket cannot listen socket!");
   }
 }
 
-std::shared_ptr<Server> &Server::getInstance(const in_port_t &port) {
-  if (instance == nullptr) {
-    instance.reset(new Server(port));
+Server *Server::getInstance(const in_port_t &port) {
+  if (instance == NULL) {
+    instance = new Server(port);
   }
 
   return instance;
 }
 
 int Server::accept() {
-  sockaddr_in remote{};
+  sockaddr_in remote;
   socklen_t sockaddr_in_len = sizeof(sockaddr_in);
   int client_socket;
-  if ((client_socket =
-           ::accept(socket, (sockaddr *)&remote, &sockaddr_in_len)) < 0) {
+  if ((client_socket = ::accept(server_socket, (sockaddr *)&remote,
+                                &sockaddr_in_len)) < 0) {
     return client_socket;
   }
 
-  clients.insert(
-      std::make_pair(client_socket, std::make_shared<Client>(client_socket)));
-  request_sockets.push_back(client_socket);
+  clients.insert(std::make_pair(Socket(client_socket, REQUEST),
+                                new Client(client_socket)));
 
   return client_socket;
 }
 
-fd_set Server::getFdSet() const {
-  fd_set sockets;
-  FD_ZERO(&sockets);
-  for (auto request_socket : getClientRequestSockets()) {
-    FD_SET(request_socket, &sockets);
-  }
-  for (auto resource_socket : getClientResourceSockets()) {
-    FD_SET(resource_socket, &sockets);
+Client *Server::deleteClient(const int &socket) {
+  std::map<Socket, Client *>::iterator client = clients.find(Socket(socket));
+  if (client == clients.end()) {
+    return NULL;
   }
 
-  return sockets;
+  clients.erase(client);
+  return client->second;
 }
 
-void Server::deleteClient(const int &socket) {
-  auto client = clients.find(socket);
-  int request_socket = 0;
-  int resource_socket = 0;
-  if (client != clients.end()) {
-    clients.erase(client);
-    if (client->second->getSocket() == socket) {
-      request_socket = socket;
-      resource_socket = client->second->getResourceSocket();
-      auto resource = clients.find(resource_socket);
-      if (resource != clients.end()) {
-        clients.erase(resource);
-      }
-    } else {
-      resource_socket = socket;
-      request_socket = client->second->getSocket();
-      auto main = clients.find(request_socket);
-      if (main != clients.end()) {
-        clients.erase(main);
-      }
-    }
-  } else {
-    return;
+bool Server::addClientResourceSocket(const int &socket) {
+  std::map<Socket, Client *>::iterator client =
+      clients.find(Socket(socket, REQUEST));
+  if (client == clients.end()) {
+    return false;
   }
-  auto request_socket_iter =
-      find(request_sockets.begin(), request_sockets.end(), request_socket);
-  if (request_socket_iter != request_sockets.end()) {
-    request_sockets.erase(request_socket_iter);
-  }
-  auto resource_socket_iter =
-      find(resource_sockets.begin(), resource_sockets.end(), resource_socket);
-  if (resource_socket_iter != resource_sockets.end()) {
-    resource_sockets.erase(resource_socket_iter);
-  }
+  clients.insert(std::make_pair(
+      Socket(client->second->getResourceSocket(), RESOURCE), client->second));
+
+  return true;
 }
 
-int Server::getMaxClientSocket() const {
-  auto request_socket =
-      std::max_element(request_sockets.begin(), request_sockets.end());
-  auto resource_socket =
-      std::max_element(resource_sockets.begin(), resource_sockets.end());
-
-  int max_request_socket =
-      (request_socket == request_sockets.end() ? 0 : *request_socket);
-  int max_resource_socket =
-      (resource_socket == resource_sockets.end() ? 0 : *resource_socket);
-
-  return std::max(max_resource_socket, max_request_socket);
-}
-
-void Server::addClientResourceSocket(const std::shared_ptr<Client> &client) {
-  clients.insert(std::make_pair(client->getResourceSocket(), client));
-  resource_sockets.push_back(client->getResourceSocket());
-}
-
-std::shared_ptr<Data> Server::getCachedResource(const std::string &url) const {
-  auto resource = cache.find(url);
+Data *Server::getCachedResource(const std::string &url) const {
+  std::map<std::string, Data *>::const_iterator resource = cache.find(url);
   if (resource == cache.end()) {
-    return nullptr;
+    return NULL;
   }
 
   return resource->second;
 }
 
-void Server::sendCachedDataToClients() const {
-  for (const auto &data : cache) {
-    data.second->sendDataToClients();
+bool Server::moveRequestToResponseSocket(const int &socket) {
+  Client *client = deleteClient(socket);
+  if (client == NULL) {
+    return false;
+  }
+  clients.insert(std::make_pair(Socket(socket, RESPONSE), client));
+
+  return true;
+}
+
+std::pair<pollfd *, size_t> Server::getSocketsTasks() const {
+  std::pair<pollfd *, size_t> result;
+  result.first = new pollfd[clients.size() + 1];
+  result.second = clients.size() + 1;
+  size_t i = 0;
+  for (std::map<Socket, Client *>::const_iterator client = clients.begin();
+       client != clients.end(); client++) {
+    result.first[i].fd = client->first.socket;
+    switch (client->first.type) {
+    case REQUEST:
+    case RESOURCE:
+      result.first[i].events = POLLIN;
+      break;
+    case RESPONSE:
+      result.first[i].events = POLLOUT;
+      break;
+    case NONE:
+      break;
+    }
+    i++;
+  }
+  result.first[i].fd = server_socket;
+  result.first[i].events = POLLIN;
+
+  return result;
+}
+
+int Server::execClientAction(const int &socket) {
+  if (socket == server_socket) {
+    return accept();
+  }
+  std::map<Socket, Client *>::iterator client = clients.find(Socket(socket));
+  switch (client->first.type) {
+  case REQUEST: {
+    int status = client->second->readHttpHeader();
+    if (status == -1) {
+      delete deleteClient(socket);
+    } else if (status == 0) {
+      std::string resource = client->second->getRequestedResource();
+      if (PicoHttpRequest::isNone(resource)) {
+        delete deleteClient(socket);
+        return -1;
+      }
+      Data *data = getCachedResource(resource);
+      if (data != NULL) {
+#ifdef DEBUG
+        std::cerr << "Getting resource " << resource << " from cache."
+                  << std::endl;
+#endif
+        client->second->setSendData(data);
+        moveRequestToResponseSocket(socket);
+      } else {
+        Data *new_data = client->second->sendRequest();
+        if (new_data == NULL) {
+          delete deleteClient(socket);
+        } else {
+#ifdef DEBUG
+          std::cerr << "Start to download resource " << resource << std::endl;
+#endif
+          cache.insert(std::make_pair(resource, new_data));
+          addClientResourceSocket(socket);
+          moveRequestToResponseSocket(socket);
+        }
+      }
+    }
+    return status;
+  }
+  case RESOURCE: {
+    int error = client->second->proxyingData();
+    if (error == -1) {
+      client->second->closeResourceSocket();
+      deleteClient(socket);
+      delete client->second;
+    }
+    return error;
+  }
+  case RESPONSE: {
+    int error = client->second->sendData();
+    if (error == -1) {
+      client->second->closeSocket();
+      deleteClient(socket);
+    }
+    return error;
+  }
+  case NONE:
+    break;
+  }
+
+  return 0;
+}
+
+Server::~Server() {
+  for (std::map<Socket, Client *>::const_iterator client = clients.begin();
+       client != clients.end(); client++) {
+    delete client->second;
+  }
+  for (std::map<std::string, Data *>::iterator data = cache.begin();
+       data != cache.end(); data++) {
+    delete data->second;
+  }
+}
+
+void Server::updateCache() {
+  std::vector<std::map<std::string, Data *>::iterator> to_delete;
+  for (std::map<std::string, Data *>::iterator data = cache.begin();
+       data != cache.end(); data++) {
+    if (data->second->getDeleteRequest()) {
+      delete data->second;
+      to_delete.push_back(data);
+    }
+  }
+  for (size_t i = 0; i < to_delete.size(); i++) {
+#ifdef DEBUG
+    std::cerr << "Delete cache: " << to_delete[i]->second->getResourcePath()
+              << std::endl;
+#endif
+    cache.erase(to_delete[i]);
   }
 }

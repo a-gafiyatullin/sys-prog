@@ -1,77 +1,75 @@
 #include "Client.h"
 
 Client::Client(const int &socket)
-    : socket(socket), request(nullptr), data(nullptr),
-      resource_socket(::socket(AF_INET, SOCK_STREAM, 0)) {
-  if (socket < 0) {
-    throw std::out_of_range("Client::resource_socket < 0!");
+    : socket(socket), http_header(NULL), resource_socket(::socket(AF_INET, SOCK_STREAM, 0)) {
+  if(resource_socket < 0) {
+    throw std::domain_error("Client::resource_socket < 0!");
   }
+  data.first = NULL;
+  data.second = 0;
 }
 
-std::pair<std::shared_ptr<PicoHttpRequest>, int> Client::readRequest() {
-  if (request == nullptr) {
-    request = std::make_shared<PicoHttpRequest>();
+int Client::readHttpHeader(const char *ext_buffer, const size_t &ext_length) {
+  if (http_header == NULL) {
+    http_header = new PicoHttpRequest();
   }
 
-  auto buffer = request->getDataBuffer();
-  size_t length = recv(socket, buffer.first, buffer.second, 0);
+  std::pair<char *, size_t> buffer = http_header->getDataBuffer();
+  size_t length = 0;
+  if (ext_buffer == NULL) {
+    length = recv(socket, buffer.first, buffer.second, 0);
+  } else {
+    memcpy(buffer.first, ext_buffer, std::min(ext_length, buffer.second));
+    length = ext_length;
+  }
   if (length <= 0) {
-    request = nullptr;
-    return std::make_pair(nullptr, -1);
+    delete http_header;
+    http_header = NULL;
+    return -1;
   }
 
-  int error = request->parseData(length);
+  int error = http_header->parseData(length);
   if (error == -1) {
-    request = nullptr;
-    return std::make_pair(nullptr, -1);
+    delete http_header;
+    http_header = NULL;
+    return -1;
   }
 
   if (error > 0) {
-    std::pair<std::shared_ptr<PicoHttpRequest>, int> rez;
-    rez.first = request;
-    rez.second = 0;
-    request = nullptr;
-    return rez;
+    return 0;
   }
 
-  return std::make_pair(nullptr, error);
+  return error;
 }
 
-Client::~Client() {
-  close(socket);
-  close(resource_socket);
-}
-
-std::shared_ptr<Data>
-Client::sendRequest(const std::shared_ptr<PicoHttpRequest> &request) {
-  if (!request->getResource().has_value() ||
-      !request->getHostName().has_value()) {
-    return nullptr;
+Data *Client::sendRequest() {
+  PicoHttpRequest *request = dynamic_cast<PicoHttpRequest *>(http_header);
+  if (PicoHttpRequest::isNone(request->getResource()) ||
+      PicoHttpRequest::isNone(request->getHostName())) {
+    return NULL;
   }
-  auto req = "GET " + request->getResource().value() + " HTTP/1.1\r\n";
-  req += "Host: " + request->getHostName().value() + "\r\n";
-  if (request->getUserHeaders().has_value()) {
-    req += request->getUserHeaders().value();
+  std::string req_str = "GET " + request->getResource() + " HTTP/1.1\r\n";
+  req_str += "Host: " + request->getHostName() + "\r\n";
+  req_str += "Connection: close\r\n";
+  if (!PicoHttpRequest::isNone(request->getUserHeaders())) {
+    req_str += request->getUserHeaders();
   }
-  req += "\r\n";
+  req_str += "\r\n";
 
-#ifdef DEBUG
-  std::cerr << "Send request: " << req;
-#endif
-
-  auto address = parseHostname(request->getHostName().value());
+  std::pair<std::string, in_port_t> address =
+      parseHostname(request->getHostName());
   int error = 0;
   if (connectResourceServer(address.first, address.second,
                             isDNSHostname(address.first))) {
-    error = send(resource_socket, req.c_str(), req.size(), 0) > 0;
+    error = send(resource_socket, req_str.c_str(), req_str.size(), 0) > 0;
   }
 
   if (error <= 0) {
-    return nullptr;
+    return NULL;
   }
 
-  data = std::make_shared<Data>();
-  return data;
+  data = std::make_pair(new Data(request->getURL()), 0);
+  return data.first;
 }
 
 bool Client::connectResourceServer(const std::string &address,
@@ -85,16 +83,16 @@ bool Client::connectResourceServer(const std::string &address,
     }
   } else {
     addrinfo *info;
-    addrinfo request{};
-    request.ai_flags = AI_ADDRCONFIG;
-    request.ai_family = AF_INET;
-    request.ai_protocol = SOCK_STREAM;
-    request.ai_socktype = 0;
-    request.ai_addr = nullptr;
-    request.ai_addrlen = 0;
-    request.ai_canonname = nullptr;
-    request.ai_next = nullptr;
-    if (getaddrinfo(address.c_str(), nullptr, &request, &info) < 0) {
+    addrinfo req = {};
+    req.ai_flags = AI_ADDRCONFIG;
+    req.ai_family = AF_INET;
+    req.ai_protocol = SOCK_STREAM;
+    req.ai_socktype = 0;
+    req.ai_addr = NULL;
+    req.ai_addrlen = 0;
+    req.ai_canonname = NULL;
+    req.ai_next = NULL;
+    if (getaddrinfo(address.c_str(), NULL, &req, &info) < 0) {
       return false;
     }
     resourceServerAddress = *(sockaddr_in *)info->ai_addr;
@@ -112,67 +110,95 @@ Client::parseHostname(const std::string &host) {
   in_port_t port = 80;
 
   if (delimiter != std::string::npos) {
-    port = std::stoi(host.substr(delimiter + 1), nullptr, 10);
+    port = atoi(host.substr(delimiter + 1).c_str());
   }
 
   return std::make_pair(host.substr(0, delimiter), port);
 }
 
 bool Client::isDNSHostname(const std::string &host) {
-  std::regex ipv4(R"(\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3})");
-  return std::regex_match(host, ipv4);
+  size_t idx = host.find_first_not_of("0123456789.");
+  return idx == std::string::npos;
 }
 
-bool Client::proxyingData() const {
-  if (data == nullptr) {
-    return false;
+int Client::proxyingData() {
+  if (data.first == NULL) {
+    return -1;
   }
+
   char buffer[BUFSIZ];
-  size_t len = recv(resource_socket, buffer, BUFSIZ, 0);
+  ssize_t len = recv(resource_socket, buffer, BUFSIZ, 0);
 
-#ifdef DEBUG
-  std::cerr << "Receiving data: " << len << "  bytes." << std::endl;
-#endif
-
+  // check if download is canceled
   if (len <= 0) {
-    data->setCoherence(true);
-    return false;
-  }
-  std::shared_ptr<char> array(new char[len], std::default_delete<char[]>());
-  memcpy(array.get(), buffer, len);
-  data->pushData(std::make_pair(array, len));
-
-  return send(socket, buffer, len, 0) > 0;
-}
-
-bool Client::sendData(
-    const std::pair<std::shared_ptr<char>, size_t> &data) const {
+    if (!http_header->isRequest()) {
+      if (data.first->getExpectedLength() > 0 && !data.first->isFull()) {
+        data.first->setDeleteRequest(true);
 #ifdef DEBUG
-  std::cerr << "Send data: " << std::string(data.first.get(), data.second)
-            << std::endl;
+        std::cerr << "Cache coherence is broken!" << std::endl;
 #endif
-  return send(socket, data.first.get(), data.second, 0) > 0;
+        return -1;
+      }
+    } else {
+      data.first->setCoherence(true);
+      return -1;
+    }
+  }
+
+  // parse response header from resource server and get content length
+  if (data.first->getExpectedLength() == 0) {
+    if (http_header->isRequest()) {
+      delete http_header;
+      http_header = new PicoHttpResponse();
+    }
+    int error = readHttpHeader(buffer, len);
+    if (error == -1) {
+      return error;
+    }
+    if (error == 0) {
+      std::string length =
+          dynamic_cast<PicoHttpResponse *>(http_header)->getContentLength();
+      if (PicoHttpParser::isNone(length)) {
+        data.first->setExpectedLength(-1);
+      } else {
+        data.first->setExpectedLength(atoi(length.c_str()));
+      }
+    }
+  }
+
+  char *array = new char[len];
+  memcpy(array, buffer, len);
+  data.first->pushData(std::make_pair(array, len));
+
+  return 0;
 }
 
-bool Data::sendDataToClients() {
-  std::vector<std::shared_ptr<Client>> to_delete;
-  for (const auto &client : clients) {
-    if (client.second >= data.size()) {
-      if (coherence) {
-        to_delete.push_back(client.first);
-      }
-      continue;
-    }
-    if (!client.first->sendData(data[client.second])) {
-      to_delete.push_back(client.first);
-      continue;
-    }
-    clients[client.first]++;
+int Client::sendData() {
+  if (data.first->getDeleteRequest()) {
+    return -1;
+  }
+  if (data.second >= data.first->getDataPieceCounter()) {
+    return (data.first->getCoherence() ? -1 : -2);
   }
 
-  for (auto client : to_delete) {
-    clients.erase(client);
-  }
+  std::pair<char *, size_t> curr_data_piece = data.first->at(data.second);
+  data.second++;
 
-  return true;
+  return send(socket, curr_data_piece.first, curr_data_piece.second, 0);
+}
+
+std::string Client::getRequestedResource() const {
+  if (http_header == NULL) {
+    return PicoHttpParser::NONE;
+  }
+  if (http_header->isRequest()) {
+    return dynamic_cast<PicoHttpRequest *>(http_header)->getURL();
+  }
+  return data.first->getResourcePath();
+}
+
+Data::~Data() {
+  for (size_t i = 0; i < data.size(); i++) {
+    delete[] data[i].first;
+  }
 }

@@ -2,64 +2,56 @@
 
 #include "../client/Client.h"
 #include <algorithm>
-#include <fcntl.h>
 #include <map>
-#include <memory>
-#include <netinet/in.h>
-#include <optional>
+#include <poll.h>
 #include <stdexcept>
-#include <system_error>
-#include <unistd.h>
+
+enum SocketType { REQUEST, RESOURCE, RESPONSE, NONE };
+
+struct Socket {
+  int socket;
+  SocketType type;
+  Socket(const int &socket, const SocketType &type)
+      : socket(socket), type(type) {}
+  explicit Socket(const int &socket) : socket(socket), type(NONE) {}
+};
 
 class Server {
 private:
-  static std::shared_ptr<Server> instance;
-  int socket;
-  sockaddr_in address{};
-  std::map<int, std::shared_ptr<Client>> clients;
-  std::vector<int> request_sockets;
-  std::vector<int> resource_sockets;
+  static Server *instance;
+  int server_socket;
+  sockaddr_in address;
 
-  std::map<std::string, std::shared_ptr<Data>> cache;
+  struct compare {
+    bool operator()(const Socket &l, const Socket &r) const {
+      return l.socket < r.socket;
+    }
+  };
+
+  std::map<Socket, Client *, compare> clients;
+  std::map<std::string, Data *> cache;
 
   explicit Server(const in_port_t &port);
 
-public:
-  static std::shared_ptr<Server> &getInstance(const in_port_t &port);
-
   int accept();
 
-  [[nodiscard]] inline int getServerSocket() const { return socket; }
+  bool addClientResourceSocket(const int &socket);
 
-  [[nodiscard]] inline std::vector<int> getClientRequestSockets() const {
-    return request_sockets;
-  }
+  bool moveRequestToResponseSocket(const int &socket); // change socket type
 
-  [[nodiscard]] inline std::vector<int> getClientResourceSockets() const {
-    return resource_sockets;
-  }
+  Data *getCachedResource(const std::string &url) const;
 
-  [[nodiscard]] inline std::shared_ptr<Client> &getClient(const int &socket) {
-    return clients[socket];
-  }
+  Client *deleteClient(const int &socket);
 
-  void deleteClient(const int &socket);
+public:
+  static Server *getInstance(const in_port_t &port);
 
-  void addClientResourceSocket(const std::shared_ptr<Client> &client);
+  std::pair<pollfd *, size_t> getSocketsTasks() const; // sockets tasks for poll
 
-  [[nodiscard]] int getMaxClientSocket() const;
+  int execClientAction(
+      const int &socket); // execute client's action depend on socket type
 
-  [[nodiscard]] fd_set getFdSet() const;
+  void updateCache(); // delete bad cache entries
 
-  [[nodiscard]] std::shared_ptr<Data>
-  getCachedResource(const std::string &url) const;
-
-  inline void addCacheElement(const std::string &url,
-                              const std::shared_ptr<Data> &data) {
-    cache.insert(std::make_pair(url, data));
-  }
-
-  void sendCachedDataToClients() const;
-
-  ~Server() { close(socket); }
+  ~Server();
 };

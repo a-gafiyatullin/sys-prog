@@ -2,7 +2,6 @@
 #include <csignal>
 #include <getopt.h>
 #include <iostream>
-#include <sys/select.h>
 
 bool stop = false;
 
@@ -17,7 +16,7 @@ int main(int argc, char *argv[]) {
 
   in_port_t port = 0;
   char c;
-  while ((c = getopt(argc, argv, "p:")) != EOF) {
+  while ((c = getopt(argc, argv, "p:")) != EOF) { // get server port number
     switch (c) {
     case 'p':
       port = atoi(optarg);
@@ -28,75 +27,34 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  signal(SIGINT, sig_stop);
+  signal(SIGINT, sig_stop); // use SIGINT to finish program in the good way
+  struct sigaction act;
+  act.sa_handler = SIG_IGN;
+  sigemptyset(&act.sa_mask);
+  sigaction(SIGPIPE, &act, NULL); // ignore SIGPIPE from sockets
+
+  Server *server = Server::getInstance(port);
 
   std::cout << "http-proxy started at port " << port << std::endl;
-  auto server = Server::getInstance(port);
-  timeval timevl{};
-  timevl.tv_sec = 0;
-  timevl.tv_usec = 0;
-
   while (!stop) {
-    server->accept();
-    auto sockets = server->getFdSet();
-    if (select(server->getMaxClientSocket() + 1, &sockets, nullptr, nullptr,
-               &timevl) > 0) {
-      for (auto request_socket :
-           server->getClientRequestSockets()) { // get requests from clients
-        if (FD_ISSET(request_socket, &sockets)) {
-          auto curr_client = server->getClient(request_socket);
-          auto request = curr_client->readRequest();
-          if (request.second == -1) {
-            server->deleteClient(request_socket);
-            continue;
-          }
-#ifdef DEBUG
-          std::cerr << "Access to resource: "
-                    << request.first->getResource().value_or(
-                           "Getting full request...")
-                    << std::endl;
-#endif
-          if (request.second != 0) {
-            continue;
-          }
-          if (!request.first->getURL().has_value()) {
-            server->deleteClient(request_socket);
-            continue;
-          }
-          auto data =
-              server->getCachedResource(request.first->getURL().value());
-          if (data == nullptr) {
-            auto cache_element = curr_client->sendRequest(request.first);
-            if (cache_element != nullptr) {
-              server->addCacheElement(request.first->getURL().value(),
-                                      cache_element);
-              server->addClientResourceSocket(curr_client);
-#ifdef DEBUG
-              std::cerr << "Client's resource socket is added to reading!"
-                        << std::endl;
-#endif
-            } else {
-              server->deleteClient(request_socket);
-            }
-          } else {
-#ifdef DEBUG
-            std::cerr << "Add client to receiving cached data" << std::endl;
-#endif
-            data->addClient(curr_client);
-            server->deleteClient(request_socket);
-          }
-        }
+    std::pair<pollfd *, size_t> socket_set =
+        server->getSocketsTasks(); // get commands for sockets
+    if(poll(socket_set.first, socket_set.second, -1) < 0) {
+      continue;
+    }
+    for (size_t i = 0; i < socket_set.second; i++) {
+      if (socket_set.first[i].revents == 0) {
+        continue;
       }
-      for (auto resource_socket :
-           server->getClientResourceSockets()) { // get data from servers
-        if (FD_ISSET(resource_socket, &sockets)) {
-          auto curr_client = server->getClient(resource_socket);
-          if (!curr_client->proxyingData()) {
-            server->deleteClient(resource_socket);
-          }
-        }
+      if (socket_set.first[i].revents != 0) {
+        server->execClientAction(socket_set.first[i].fd);
       }
     }
-    server->sendCachedDataToClients();
+    server->updateCache();
+    delete socket_set.first; // delete previous commands array
   }
+
+  delete server; // free server structures
+
+  return 0;
 }

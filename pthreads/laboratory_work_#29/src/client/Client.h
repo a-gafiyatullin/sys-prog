@@ -1,53 +1,72 @@
 #pragma once
 
 #include "../utility/PicoHttpRequest.h"
+#include "../utility/PicoHttpResponse.h"
 #include <arpa/inet.h>
-#include <boost/shared_ptr.hpp>
-#include <iostream>
-#include <memory>
+#include <cstdlib>
+#include <cstring>
 #include <netdb.h>
 #include <netinet/in.h>
-#include <regex>
 #include <sys/socket.h>
-#include <system_error>
 #include <unistd.h>
+#include <iostream>
 
 class Client;
 
 class Data {
 private:
-  std::vector<std::pair<std::shared_ptr<char>, size_t>> data;
-  std::map<std::shared_ptr<Client>, size_t> clients;
+  std::vector<std::pair<char *, size_t> > data;
   bool coherence;
+  bool delete_request;
+  ssize_t expected_length;
+  size_t current_length;
+  std::string resource_path;
 
 public:
-  Data() : coherence(false){};
+  Data(const std::string &resource_path)
+      : coherence(false), expected_length(0), current_length(0),
+        resource_path(resource_path), delete_request(false){};
 
-  inline void setCoherence(const bool &status) { coherence = true; }
+  inline void setCoherence(const bool &status) { coherence = status; }
 
-  inline void pushData(const std::pair<std::shared_ptr<char>, size_t> data) {
-    this->data.push_back(data);
+  inline void setExpectedLength(ssize_t length) { expected_length = length; }
+
+  inline ssize_t getExpectedLength() const { return expected_length; }
+
+  inline void setDeleteRequest(const bool status) { delete_request = status; }
+
+  inline bool getDeleteRequest() const { return delete_request; }
+
+  inline bool getCoherence() const { return coherence; }
+
+  inline bool isFull() const { return expected_length <= current_length; }
+
+  inline std::string getResourcePath() const { return resource_path; }
+
+  inline void pushData(const std::pair<char *, size_t> new_data) {
+    data.push_back(new_data);
+    current_length += new_data.second;
   }
 
-  bool sendDataToClients();
+  inline size_t getDataPieceCounter() const { return data.size(); }
 
-  inline void addClient(const std::shared_ptr<Client> &client) {
-    clients.insert(std::make_pair(client, 0));
-  }
+  inline std::pair<char *, size_t> at(size_t i) const { return data[i]; }
+
+  ~Data();
 };
 
 class Client {
 private:
   int socket;
   int resource_socket;
-  std::shared_ptr<PicoHttpRequest> request;
-  sockaddr_in resourceServerAddress{};
-  std::shared_ptr<Data> data;
+  PicoHttpParser *http_header;
+  sockaddr_in resourceServerAddress;
+  std::pair<Data *, size_t> data;
 
   bool connectResourceServer(const std::string &address, const in_port_t &port,
                              const bool &isIp);
 
-  [[nodiscard]] static std::pair<std::string, in_port_t>
+  static std::pair<std::string, in_port_t>
   parseHostname(const std::string &host);
 
   static bool isDNSHostname(const std::string &host);
@@ -55,18 +74,27 @@ private:
 public:
   explicit Client(const int &socket);
 
-  [[nodiscard]] std::pair<std::shared_ptr<PicoHttpRequest>, int> readRequest();
+  int readHttpHeader(const char *buffer = NULL, const size_t &length = 0);
 
-  [[nodiscard]] bool proxyingData() const;
+  int proxyingData(); // get a data from the resource server
 
-  bool sendData(const std::pair<std::shared_ptr<char>, size_t> &data) const;
+  int sendData(); // send a data to the client from the data structure
 
-  std::shared_ptr<Data>
-  sendRequest(const std::shared_ptr<PicoHttpRequest> &request);
+  Data *sendRequest(); // send the request to the resource server
 
-  [[nodiscard]] inline int getResourceSocket() const { return resource_socket; }
+  inline void setSendData(
+      Data *send_data) { // set a data that would be used in sendData method
+    data.first = send_data;
+    data.second = 0;
+  }
 
-  [[nodiscard]] inline int getSocket() const { return socket; }
+  inline int getResourceSocket() { return resource_socket; }
 
-  ~Client();
+  std::string getRequestedResource() const;
+
+  inline void closeSocket() { close(socket); }
+
+  inline void closeResourceSocket() { close(resource_socket); }
+
+  ~Client() { delete http_header; };
 };
