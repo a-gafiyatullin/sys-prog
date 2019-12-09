@@ -33,11 +33,15 @@ public:
                           BUFSIZ - total_data_len);
   }
 
+  inline std::pair<char *, size_t> getDataBuffer(size_t start) const {
+    return std::make_pair((char *)(data + start), total_data_len - start);
+  }
+
   static bool isNone(const std::string &str) { return NONE == str; }
 
   virtual int parseData(const size_t &curr_buff_len) = 0;
 
   virtual bool isRequest() const = 0;
 
-  virtual ~PicoHttpParser() {};
+  virtual ~PicoHttpParser(){};
 };

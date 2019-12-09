@@ -39,7 +39,7 @@ int main(int argc, char *argv[]) {
   while (!stop) {
     std::pair<pollfd *, size_t> socket_set =
         server->getSocketsTasks(); // get commands for sockets
-    if(poll(socket_set.first, socket_set.second, -1) < 0) {
+    if (poll(socket_set.first, socket_set.second, -1) < 0) {
       continue;
     }
     for (size_t i = 0; i < socket_set.second; i++) {

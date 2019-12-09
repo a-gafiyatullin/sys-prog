@@ -39,7 +39,7 @@ int Server::accept() {
     return client_socket;
   }
 
-  clients.insert(std::make_pair(Socket(client_socket, REQUEST),
+  clients.insert(std::make_pair(Socket(client_socket, GET_REQUEST),
                                 new Client(client_socket)));
 
   return client_socket;
@@ -56,13 +56,12 @@ Client *Server::deleteClient(const int &socket) {
 }
 
 bool Server::addClientResourceSocket(const int &socket) {
-  std::map<Socket, Client *>::iterator client =
-      clients.find(Socket(socket, REQUEST));
+  std::map<Socket, Client *>::iterator client = clients.find(Socket(socket));
   if (client == clients.end()) {
     return false;
   }
   clients.insert(std::make_pair(
-      Socket(client->second->getResourceSocket(), RESOURCE), client->second));
+      Socket(client->second->getResourceSocket(), CONNECT), client->second));
 
   return true;
 }
@@ -76,16 +75,6 @@ Data *Server::getCachedResource(const std::string &url) const {
   return resource->second;
 }
 
-bool Server::moveRequestToResponseSocket(const int &socket) {
-  Client *client = deleteClient(socket);
-  if (client == NULL) {
-    return false;
-  }
-  clients.insert(std::make_pair(Socket(socket, RESPONSE), client));
-
-  return true;
-}
-
 std::pair<pollfd *, size_t> Server::getSocketsTasks() const {
   std::pair<pollfd *, size_t> result;
   result.first = new pollfd[clients.size() + 1];
@@ -95,11 +84,14 @@ std::pair<pollfd *, size_t> Server::getSocketsTasks() const {
        client != clients.end(); client++) {
     result.first[i].fd = client->first.socket;
     switch (client->first.type) {
-    case REQUEST:
-    case RESOURCE:
+    case GET_REQUEST:
+    case GET_RESOURCE:
+    case GET_RESPONSE:
       result.first[i].events = POLLIN;
       break;
-    case RESPONSE:
+    case CONNECT:
+    case SEND_REQUEST:
+    case SEND_RESOURCE:
       result.first[i].events = POLLOUT;
       break;
     case NONE:
@@ -115,17 +107,26 @@ std::pair<pollfd *, size_t> Server::getSocketsTasks() const {
 
 int Server::execClientAction(const int &socket) {
   if (socket == server_socket) {
+#ifdef DEBUG
+    std::cerr << "New connection!" << std::endl;
+#endif
     return accept();
   }
   std::map<Socket, Client *>::iterator client = clients.find(Socket(socket));
   switch (client->first.type) {
-  case REQUEST: {
+  case GET_REQUEST: {
     int status = client->second->readHttpHeader();
     if (status == -1) {
+#ifdef DEBUG
+      std::cerr << "GET_REQUEST: Connection is rejected!" << std::endl;
+#endif
       delete deleteClient(socket);
     } else if (status == 0) {
       std::string resource = client->second->getRequestedResource();
       if (PicoHttpRequest::isNone(resource)) {
+#ifdef DEBUG
+        std::cerr << "Nothing to download!" << std::endl;
+#endif
         delete deleteClient(socket);
         return -1;
       }
@@ -136,37 +137,102 @@ int Server::execClientAction(const int &socket) {
                   << std::endl;
 #endif
         client->second->setSendData(data);
-        moveRequestToResponseSocket(socket);
+        changeSocketType(socket, SEND_RESOURCE);
       } else {
-        Data *new_data = client->second->sendRequest();
-        if (new_data == NULL) {
-          delete deleteClient(socket);
-        } else {
-#ifdef DEBUG
-          std::cerr << "Start to download resource " << resource << std::endl;
-#endif
-          cache.insert(std::make_pair(resource, new_data));
-          addClientResourceSocket(socket);
-          moveRequestToResponseSocket(socket);
-        }
+        changeSocketType(socket, NONE);
+        addClientResourceSocket(socket);
       }
     }
     return status;
   }
-  case RESOURCE: {
-    int error = client->second->proxyingData();
+
+  case CONNECT: {
+    int error = client->second->connectResourceServer();
     if (error == -1) {
-      client->second->closeResourceSocket();
-      deleteClient(socket);
-      delete client->second;
+#ifdef DEBUG
+      std::cerr << "CONNECT: Connection is rejected!" << std::endl;
+#endif
+      deleteClient(client->second->getSocket());
+      delete deleteClient(socket);
+    } else if (error == 0) {
+#ifdef DEBUG
+      std::cerr << "CONNECT: Connection is successful!" << std::endl;
+#endif
+      changeSocketType(socket, SEND_REQUEST);
     }
     return error;
   }
-  case RESPONSE: {
-    int error = client->second->sendData();
+
+  case SEND_REQUEST: {
+    int error = client->second->sendRequest();
     if (error == -1) {
+#ifdef DEBUG
+      std::cerr << "SEND_REQUEST: Connection is rejected!" << std::endl;
+#endif
+      deleteClient(client->second->getSocket());
+      delete deleteClient(socket);
+    } else if (error == 0) {
+      changeSocketType(socket, GET_RESPONSE);
+    }
+    return error;
+  }
+
+  case GET_RESPONSE: {
+    int error = client->second->readHttpHeader();
+    if (error == -1) {
+#ifdef DEBUG
+      std::cerr << "GET_RESPONSE: Connection is rejected!" << std::endl;
+#endif
+      deleteClient(client->second->getSocket());
+      delete deleteClient(socket);
+    } else if (error == 0) {
+      std::pair<Data *, ssize_t> status = client->second->parseResponse();
+      if (status.second == 0) {
+        cache.insert(std::make_pair(client->second->getRequestedResource(),
+                                    status.first));
+      }
+#ifdef DEBUG
+      std::cerr << "Start to download resource "
+                << client->second->getRequestedResource() << std::endl;
+#endif
+      changeSocketType(client->second->getSocket(), SEND_RESOURCE);
+      changeSocketType(socket, GET_RESOURCE);
+    }
+    return error;
+  }
+
+  case GET_RESOURCE: {
+    int error = client->second->getResource();
+    if (error == -1) {
+#ifdef DEBUG
+      std::cerr << "Resource " << client->second->getRequestedResource()
+                << " is downloaded!" << std::endl;
+#endif
+      client->second->closeResourceSocket();
+      deleteClient(socket);
+      if (client->second->getDeleteRequest()) {
+        delete client->second;
+      } else {
+        client->second->setDeleteRequest(true);
+      }
+    }
+    return error;
+  }
+
+  case SEND_RESOURCE: {
+    int error = client->second->sendResource();
+    if (error == -1) {
+#ifdef DEBUG
+      std::cerr << "Resource " << client->second->getRequestedResource()
+                << " is sent!" << std::endl;
+#endif
       client->second->closeSocket();
       deleteClient(socket);
+      if (client->second->getDeleteRequest()) {
+        delete client->second;
+      } else {
+        client->second->setDeleteRequest(true);
+      }
     }
     return error;
   }
@@ -198,10 +264,16 @@ void Server::updateCache() {
     }
   }
   for (size_t i = 0; i < to_delete.size(); i++) {
-#ifdef DEBUG
-    std::cerr << "Delete cache: " << to_delete[i]->second->getResourcePath()
-              << std::endl;
-#endif
     cache.erase(to_delete[i]);
   }
+}
+
+bool Server::changeSocketType(const int &socket, const SocketType &new_type) {
+  Client *client = deleteClient(socket);
+  if (client == NULL) {
+    return false;
+  }
+  clients.insert(std::make_pair(Socket(socket, new_type), client));
+
+  return true;
 }

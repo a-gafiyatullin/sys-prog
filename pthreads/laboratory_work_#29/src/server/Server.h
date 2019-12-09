@@ -6,7 +6,15 @@
 #include <poll.h>
 #include <stdexcept>
 
-enum SocketType { REQUEST, RESOURCE, RESPONSE, NONE };
+enum SocketType {
+  GET_REQUEST,
+  SEND_REQUEST,
+  GET_RESOURCE,
+  SEND_RESOURCE,
+  GET_RESPONSE,
+  CONNECT,
+  NONE
+};
 
 struct Socket {
   int socket;
@@ -37,7 +45,7 @@ private:
 
   bool addClientResourceSocket(const int &socket);
 
-  bool moveRequestToResponseSocket(const int &socket); // change socket type
+  bool changeSocketType(const int &socket, const SocketType &new_type);
 
   Data *getCachedResource(const std::string &url) const;
 

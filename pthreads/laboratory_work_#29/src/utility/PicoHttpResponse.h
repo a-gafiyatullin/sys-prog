@@ -11,6 +11,8 @@ private:
   static const std::string CONTENT_LENGTH;
 
 public:
+  static const int OK = 200;
+
   PicoHttpResponse();
 
   int parseData(const size_t &curr_buff_len);
