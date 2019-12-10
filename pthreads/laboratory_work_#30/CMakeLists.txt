@@ -13,7 +13,7 @@ add_executable(laboratory_work__30 src/client/Client.cpp
         src/utility/PicoHttpParser.h
         src/utility/PicoHttpResponse.cpp
         src/utility/PicoHttpResponse.h
-        )
+        src/data/Data.cpp src/data/Data.h)
 
 if (CMAKE_BUILD_TYPE MATCHES Debug)
     target_compile_definitions(laboratory_work__30 PUBLIC -DDEBUG)
