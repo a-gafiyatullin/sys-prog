@@ -27,34 +27,52 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  signal(SIGINT, sig_stop); // use SIGINT to finish program in the good way
-  struct sigaction act;
-  act.sa_handler = SIG_IGN;
-  sigemptyset(&act.sa_mask);
-  sigaction(SIGPIPE, &act, NULL); // ignore SIGPIPE from sockets
+  // use SIGINT to finish program in the good way
+  struct sigaction int_act;
+  int_act.sa_handler = sig_stop;
+  sigemptyset(&int_act.sa_mask);
+  int_act.sa_flags = ~SA_RESTART;
+  sigaction(SIGINT, &int_act, NULL);
+  // ignore SIGPIPE from sockets
+  struct sigaction pipe_act;
+  pipe_act.sa_handler = SIG_IGN;
+  sigemptyset(&pipe_act.sa_mask);
+  sigaction(SIGPIPE, &pipe_act, NULL);
 
   Server *server = Server::getInstance(port);
 
   std::cout << "http-proxy started at port " << port << std::endl;
+  int server_socket = server->getServerSocket();
   while (!stop) {
-    std::pair<pollfd *, size_t> socket_set =
-        server->getSocketsTasks(); // get commands for sockets
-    if (poll(socket_set.first, socket_set.second, -1) < 0) {
+    fd_set r, w, e;
+    int max_socket =
+        server->getSocketsTasks(w, r, e); // get commands for sockets
+    if (select(max_socket + 1, &r, &w, &e, NULL) <= 0) {
       continue;
     }
-    for (size_t i = 0; i < socket_set.second; i++) {
-      if (socket_set.first[i].revents == 0) {
-        continue;
-      }
-      if (socket_set.first[i].revents != 0) {
-        server->execClientAction(socket_set.first[i].fd);
+    if (FD_ISSET(server_socket, &r)) {
+      server->execClientAction(server_socket);
+    }
+
+    std::map<Socket, Client *, compare> sockets = server->getClients();
+    for (std::map<Socket, Client *>::iterator iter = sockets.begin();
+         iter != sockets.end(); iter++) {
+      if ((FD_ISSET(iter->first.socket, &r) &&
+           (iter->first.type == GET_REQUEST ||
+            iter->first.type == GET_RESPONSE ||
+            iter->first.type == GET_RESOURCE)) ||
+          (FD_ISSET(iter->first.socket, &w) &&
+           (iter->first.type == CONNECT || iter->first.type == SEND_RESOURCE ||
+            iter->first.type == SEND_REQUEST))) {
+        server->execClientAction(iter->first.socket);
       }
     }
     server->updateCache();
-    delete socket_set.first; // delete previous commands array
   }
 
+  std::cout << "Finishing server..." << std::endl;
   delete server; // free server structures
+  std::cout << "Server is finished" << std::endl;
 
   return 0;
 }

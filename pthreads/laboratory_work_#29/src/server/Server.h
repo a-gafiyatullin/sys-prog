@@ -24,17 +24,17 @@ struct Socket {
   explicit Socket(const int &socket) : socket(socket), type(NONE) {}
 };
 
+struct compare {
+  bool operator()(const Socket &l, const Socket &r) const {
+    return l.socket < r.socket;
+  }
+};
+
 class Server {
 private:
   static Server *instance;
   int server_socket;
   sockaddr_in address;
-
-  struct compare {
-    bool operator()(const Socket &l, const Socket &r) const {
-      return l.socket < r.socket;
-    }
-  };
 
   std::map<Socket, Client *, compare> clients;
   std::map<std::string, Data *> cache;
@@ -54,7 +54,14 @@ private:
 public:
   static Server *getInstance(const in_port_t &port);
 
-  std::pair<pollfd *, size_t> getSocketsTasks() const; // sockets tasks for poll
+  int getSocketsTasks(fd_set &w, fd_set &r,
+                      fd_set &e); // sockets tasks for select
+
+  inline const std::map<Socket, Client *, compare> getClients() const {
+    return clients;
+  }
+
+  inline int getServerSocket() const { return server_socket; }
 
   int execClientAction(
       const int &socket); // execute client's action depend on socket type

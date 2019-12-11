@@ -13,7 +13,7 @@ add_executable(laboratory_work__29 src/client/Client.cpp
         src/utility/PicoHttpResponse.cpp
         src/utility/PicoHttpResponse.h
         src/utility/network_utility.cpp
-        src/utility/network_utility.h)
+        src/utility/network_utility.h src/data/Data.cpp src/data/Data.h)
 
 if (CMAKE_BUILD_TYPE MATCHES Debug)
     target_compile_definitions(laboratory_work__29 PUBLIC -DDEBUG)

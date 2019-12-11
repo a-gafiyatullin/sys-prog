@@ -7,7 +7,7 @@ Client::Client(const int &socket)
       resourceServerAddress(NULL),
       resource_socket(::socket(AF_INET, SOCK_STREAM, 0)) {
   if (resource_socket < 0) {
-    throw std::domain_error("Client::resource_socket < 0!");
+    throw std::domain_error("Client::Client : resource_socket < 0!");
   }
   data.first = NULL;
   data.second = 0;
@@ -278,20 +278,4 @@ Client::~Client() {
     close(resource_socket);
   }
   delete resourceServerAddress;
-}
-
-Data::~Data() {
-  for (size_t i = 0; i < data.size(); i++) {
-    delete[] data[i].first;
-  }
-}
-
-std::pair<char *, ssize_t> Data::popFirst() {
-  if (data.empty()) {
-    return std::make_pair((char *)NULL, -1);
-  }
-  std::pair<char *, ssize_t> first_data = data.front();
-  data.erase(data.begin());
-
-  return first_data;
 }

@@ -5,20 +5,20 @@ Server *Server::instance = NULL;
 Server::Server(const in_port_t &port)
     : server_socket(socket(AF_INET, SOCK_STREAM, 0)) {
   if (server_socket < 0) {
-    throw std::out_of_range("Server::socket < 0!");
+    throw std::out_of_range("Server::Server : socket < 0!");
   }
   if (port < 1024) {
-    throw std::out_of_range("Server::port < 1024!");
+    throw std::out_of_range("Server::Server : port < 1024!");
   }
 
   address.sin_family = AF_INET;
   address.sin_port = htons(port);
   address.sin_addr.s_addr = INADDR_ANY;
   if (bind(server_socket, (sockaddr *)&address, sizeof(sockaddr_in)) < 0) {
-    throw std::domain_error("Server::socket cannot bind port!");
+    throw std::domain_error("Server::Server : socket cannot bind port!");
   }
   if (::listen(server_socket, SOMAXCONN) < 0) {
-    throw std::domain_error("Server::socket cannot listen socket!");
+    throw std::domain_error("Server::Server : socket cannot listen socket!");
   }
 }
 
@@ -75,34 +75,38 @@ Data *Server::getCachedResource(const std::string &url) const {
   return resource->second;
 }
 
-std::pair<pollfd *, size_t> Server::getSocketsTasks() const {
-  std::pair<pollfd *, size_t> result;
-  result.first = new pollfd[clients.size() + 1];
-  result.second = clients.size() + 1;
-  size_t i = 0;
+int Server::getSocketsTasks(fd_set &w, fd_set &r, fd_set &e) {
+  FD_ZERO(&w);
+  FD_ZERO(&r);
+  FD_ZERO(&e);
+  int max_socket = 0;
+
   for (std::map<Socket, Client *>::const_iterator client = clients.begin();
        client != clients.end(); client++) {
-    result.first[i].fd = client->first.socket;
     switch (client->first.type) {
     case GET_REQUEST:
     case GET_RESOURCE:
     case GET_RESPONSE:
-      result.first[i].events = POLLIN;
+      FD_SET(client->first.socket, &r);
       break;
     case CONNECT:
     case SEND_REQUEST:
     case SEND_RESOURCE:
-      result.first[i].events = POLLOUT;
+      FD_SET(client->first.socket, &w);
       break;
     case NONE:
       break;
     }
-    i++;
+    if (client->first.socket > max_socket) {
+      max_socket = client->first.socket;
+    }
   }
-  result.first[i].fd = server_socket;
-  result.first[i].events = POLLIN;
+  FD_SET(server_socket, &r);
+  if (server_socket > max_socket) {
+    max_socket = server_socket;
+  }
 
-  return result;
+  return max_socket;
 }
 
 int Server::execClientAction(const int &socket) {
@@ -121,6 +125,7 @@ int Server::execClientAction(const int &socket) {
       std::cerr << "GET_REQUEST: Connection is rejected!" << std::endl;
 #endif
       delete deleteClient(socket);
+      return -1;
     } else if (status == 0) {
       std::string resource = client->second->getRequestedResource();
       if (PicoHttpRequest::isNone(resource)) {
@@ -138,12 +143,12 @@ int Server::execClientAction(const int &socket) {
 #endif
         client->second->setSendData(data);
         changeSocketType(socket, SEND_RESOURCE);
+        return 0;
       } else {
         changeSocketType(socket, NONE);
         addClientResourceSocket(socket);
       }
     }
-    return status;
   }
 
   case CONNECT: {
@@ -252,6 +257,8 @@ Server::~Server() {
        data != cache.end(); data++) {
     delete data->second;
   }
+
+  close(server_socket);
 }
 
 void Server::updateCache() {
