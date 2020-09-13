@@ -1,0 +1,14 @@
+1) Self synchronization:
+    Because of the way code points are assigned, it is possible to find the
+    beginning of each character by looking only at the top two bits of each byte. This can
+    have important performance implications when performing searches in text.
+2) Encoding of code sequence length:
+    The number of bytes in the sequence is indicated by the
+    pattern of bits in the first byte of the sequence. Thus, the beginning of the next character
+    can be found quickly. This feature can also have important performance implications
+    when performing searches in text.
+3) Efficient code structure:
+    UTF-8 efficiently encodes the UCS code points. The high-order
+    bits of the code point go in the lead byte. Lower-order bits are placed in continuation
+    bytes. The number of bytes in the encoding is the minimum required to hold all the sig-
+    nificant bits of the code point.
