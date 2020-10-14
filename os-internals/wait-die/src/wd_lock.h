@@ -14,8 +14,6 @@ struct wdlock {
 	const struct wdlock_ctx *owner;
 	struct lock wd_lock_guard;
 
-	int num;
-
 	struct lock lock;
 	struct condition cv;
 };

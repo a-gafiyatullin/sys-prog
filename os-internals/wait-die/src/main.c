@@ -47,7 +47,6 @@ int main()
 
 	for (int i = 0; i < LOCKS_NUM; i++) {
 		wdlock_init(&locks[i]);
-		locks[i].num = i;
 	}
 
 	int storage = 0;
