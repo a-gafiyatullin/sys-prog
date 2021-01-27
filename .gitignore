@@ -17,3 +17,7 @@ main
 *cmake-build-release*
 .pio
 .vscode
+.vs
+Debug
+Release
+*.vcxproj.user
