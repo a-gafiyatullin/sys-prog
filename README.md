@@ -15,8 +15,3 @@
 <ul>
 <li>Stepik course "Операционные системы"</li>
 </ul>
-
-### <strong>Compilers:</strong>
-<ul>
-<li>Compilers. Principles, Techiques, & Tools. 2nd ed. by Alfred V. Aho</li>
-</ul>
