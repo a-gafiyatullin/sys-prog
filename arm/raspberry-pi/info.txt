@@ -1,0 +1,1 @@
+Boot options: https://www.raspberrypi.org/documentation/configuration/config-txt/boot.md
